@@ -26,12 +26,12 @@ class SimulationDataset(Dataset):
         self.mode = mode
         # discover simulations
         self.case_names = list(sorted(os.listdir(root)))
-        self.num_timesteps = len(
-            [
-                fname for fname in os.listdir(root / self.case_names[0])
-                if fname.endswith("_mesh.th")
-            ],
-        )
+        # self.num_timesteps = len(
+        #     [
+        #         fname for fname in os.listdir(root / self.case_names[0])
+        #         if fname.endswith("_mesh.th")
+        #     ],
+        # )
         # these values were mistakenly copied from the "v1-10000sims" dataset version of the original codebase, which was a preliminary dataset that we generated during development.
         # the correct values would be from the "v3-10000sims" dataset version which would be the following (we keep the old values as its not too important for the tutorial).
         # self.mean = torch.tensor([0.03648518770933151, 1.927249059008318e-06, 0.000112384237581864])
