@@ -51,16 +51,18 @@ class ffsDataset(Dataset):
                 self.uris.append(sampleDir)
                 if int(name.split("_")[0].replace('DP', '')) > 100:
                     self.TEST_INDICES.append(len(self.uris))
-        self.num_values = len(self.uris)
+        
 
         # split into train/test uris
         if self.mode == "train":
-            train_idxs = [i for i in range(len(self.uris)) if self.uris[i] not in self.TEST_INDICES]
+            train_idxs = [i for i in range(len(self.uris)) if i not in self.TEST_INDICES]
             self.uris = [self.uris[train_idx] for train_idx in train_idxs]
         elif self.mode == "test":
             self.uris = [self.uris[test_idx] for test_idx in self.TEST_INDICES]
         else:
             raise NotImplementedError
+        
+        self.num_values = len(self.uris)
 
     def __len__(self):
         return len(self.uris)
@@ -96,6 +98,16 @@ class ffsDataset(Dataset):
         assert torch.all(0 <= all_pos)
         assert torch.all(all_pos <= self.scale)
         return all_pos
+
+    def denormalize_pos(self, pos, pred):
+        # denormalize the position
+        pos = pos.div_(self.scale).mul_(self.domain_max - self.domain_min).add_(self.domain_min)
+        return pos
+
+    def denormalize_feat(self, pos, feat):
+        # denormalize the prediction
+        feat = feat.mul_(self.std).add_(self.mean)
+        return feat
 
     def __getitem__(self, idx):
         u = self.getitem_u(idx)
@@ -133,10 +145,10 @@ class ffsDataset(Dataset):
         else:
             target_feat = target
             output_pos = mesh_pos.clone()
-
+        
         return dict(
             index=idx,
-            # input_feat=input_feat,
+            input_feat=torch.ones_like(input_pos),
             input_pos=input_pos,
             target_feat=target_feat,
             output_pos=output_pos,

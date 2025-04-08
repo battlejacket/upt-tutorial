@@ -13,17 +13,17 @@ class ffsCollator:
         # position: batch_size * (num_inputs, ndim) -> (batch_size * num_inputs, ndim)
         # features: batch_size * (num_inputs, dim) -> (batch_size * num_inputs, dim)
         input_pos = []
-        # input_feat = []
+        input_feat = []
         input_lens = []
         for i in range(len(batch)):
             pos = batch[i]["input_pos"]
-            # feat = batch[i]["input_feat"]
-            # assert len(pos) == len(feat)
+            feat = batch[i]["input_feat"]
+            assert len(pos) == len(feat)
             input_pos.append(pos)
-            # input_feat.append(feat)
+            input_feat.append(feat)
             input_lens.append(len(pos))
         collated_batch["input_pos"] = torch.concat(input_pos)
-        # collated_batch["input_feat"] = torch.concat(input_feat)
+        collated_batch["input_feat"] = torch.concat(input_feat)
 
         # select supernodes
         supernodes_offset = 0
