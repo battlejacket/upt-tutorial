@@ -4,20 +4,15 @@
 # pip install torch
 # pip install tempfile
 import os
-import tempfile
 from argparse import ArgumentParser
 from pathlib import Path
-
-import meshio
 import numpy as np
-# import open3d as o3d
 import torch
 from tqdm import tqdm
-
 from csv_rw import csv_to_dict
+import networkx as nx
+from shapely.geometry import Point, LineString
 
-# import numpy as np
-from shapely.geometry import Point
 
 def parse_args():
     parser = ArgumentParser()
@@ -29,27 +24,35 @@ def parse_args():
     return vars(parser.parse_args())
 
 
-# import numpy as np
-# from shapely.geometry import Point, Polygon
+def order_points_tsp(points):
+    G = nx.complete_graph(len(points))
+    for i in range(len(points)):
+        for j in range(i + 1, len(points)):
+            dist = np.linalg.norm(points[i] - points[j])
+            G[i][j]["weight"] = dist
+            G[j][i]["weight"] = dist
+    tsp_path = nx.approximation.traveling_salesman_problem(G, cycle=True)
+    ordered_points = points[tsp_path]
+    return ordered_points
 
-# # Define the obstacle shape (e.g., a step as a polygon)
-# step = Polygon([(0.5, 0.0), (0.5, 0.5), (1.0, 0.5), (1.0, 0.0)])  # 2D forward-facing step
-2
-# # Your point cloud: Nx2 array of (x, y) coordinates
-# point_cloud = np.random.rand(1000, 2)  # Replace with your data
+def signed_distance(p, shape):
+    point = Point(p)
+    distance = point.distance(shape)
+    # Negative if inside the shape
+    if shape.contains(point):
+        return -distance
+    else:
+        return distance
 
-# def signed_distance(p, shape):
-#     point = Point(p)
-#     distance = point.distance(shape)
-#     # Negative if inside the shape
-#     if shape.contains(point):
-#         return -distance
-#     else:
-#         return distance
-
-# # Compute signed distances
-# sdf_values = np.array([signed_distance(p, step) for p in point_cloud])
-
+def compute_sdf(mesh_points, boundary_points):
+    # Compute signed distance function (SDF) for mesh points
+    # Order boundary points using TSP
+    ordered = order_points_tsp(boundary_points)
+    # Define outline (boundary) shape
+    boundary = LineString(ordered)
+    # Compute signed distances
+    sdf_values = np.array([signed_distance(p, boundary) for p in mesh_points])
+    return sdf_values
 
 def main(src, dst, save_normalization_param=True):
     src = Path(src).expanduser()
@@ -89,8 +92,8 @@ def main(src, dst, save_normalization_param=True):
     # Initialize variables for min/max coordinates and mean/std calculations
     min_coords = torch.tensor([float('inf'), float('inf')])
     max_coords = torch.tensor([-float('inf'), -float('inf')])
-    sum_vars = torch.tensor([0.0, 0.0, 0.0])  # For u, v, p
-    sum_sq_vars = torch.tensor([0.0, 0.0, 0.0])  # For u^2, v^2, p^2
+    sum_vars = torch.tensor([0.0, 0.0, 0.0, 0.0])  # For u, v, p, sdf
+    sum_sq_vars = torch.tensor([0.0, 0.0, 0.0, 0.0])  # For u^2, v^2, p^2, sdf^2
     total_samples = 0
 
         
@@ -111,10 +114,6 @@ def main(src, dst, save_normalization_param=True):
         min_coords = torch.min(min_coords, mesh_points.min(dim=0).values)
         max_coords = torch.max(max_coords, mesh_points.max(dim=0).values)
         torch.save(mesh_points, out / "mesh_points.th")
-        
-        # Save mesh sdf
-        # sdf_values = torch.tensor(sdf_mesh(mesh_points))
-        # torch.save(sdf_values, out / "mesh_sdf.th")
 
         # Save target variables
         for i, outVar in enumerate(dictOutvarNames):  # u, v, p
@@ -123,6 +122,23 @@ def main(src, dst, save_normalization_param=True):
             sum_vars[i] += data.sum()
             sum_sq_vars[i] += (data ** 2).sum()
             total_samples += data.numel()
+
+        # sdf
+        # Read boundary points csv
+        boundaryCsvFile = str(uri).split('_')[0].replace('CSV', 'boundary') + '_bound.csv'
+        print(f"boundaryCsvFile: {boundaryCsvFile}")
+        boundaryCsvDict = csv_to_dict(boundaryCsvFile, mapping=mapping, delimiter=",", skiprows=skiprows)
+        for key in dictVarNames:
+            boundaryCsvDict[key] += scales[key][0]
+            boundaryCsvDict[key] /= scales[key][1]
+        boundaryPoints = np.concat([boundaryCsvDict["x"], boundaryCsvDict["y"]], axis=1)
+
+        # Save sdf
+        print('computing sdf')
+        sdf_values = torch.tensor(compute_sdf(mesh_points, boundaryPoints))
+        print('sdf computed')
+        torch.save(sdf_values, out / "mesh_sdf.th")
+
 
     if save_normalization_param:
         # Calculate mean and std
