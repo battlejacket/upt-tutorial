@@ -135,12 +135,15 @@ class ffsDataset(Dataset):
         p = torch.load(self.uris[idx] / "p.th", weights_only=True)
         target = torch.cat((u, v, p), dim=1)
         re = float(str(self.uris[idx]).split('/')[-1].split('-')[0].split('_')[-1].replace(',', '.'))
+        sdf = torch.load(self.uris[idx] / "mesh_sdf.th", weights_only=True)
 
         # Filter mesh_pos and target based on self.domain_min and self.domain_max
         mask = (mesh_pos[:, 0] >= self.domain_min[0]) & (mesh_pos[:, 0] <= self.domain_max[0]) & \
                (mesh_pos[:, 1] >= self.domain_min[1]) & (mesh_pos[:, 1] <= self.domain_max[1])
         mesh_pos = mesh_pos[mask]
         target = target[mask]
+        input_feat = sdf[mask]
+        # input_feat=torch.ones_like(input_pos),
 
         # normalize
         mesh_pos = self.normalize_pos(mesh_pos)
@@ -175,7 +178,7 @@ class ffsDataset(Dataset):
         
         return dict(
             index=idx,
-            input_feat=torch.ones_like(input_pos),
+            input_feat=input_feat,
             input_pos=input_pos,
             target_feat=target_feat,
             output_pos=output_pos,

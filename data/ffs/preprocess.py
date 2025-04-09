@@ -133,7 +133,7 @@ def main(src, dst, save_normalization_param=True):
             boundaryCsvDict[key] /= scales[key][1]
         boundaryPoints = np.concat([boundaryCsvDict["x"], boundaryCsvDict["y"]], axis=1)
 
-        # Save sdf
+        # Save sdf3
         print('computing sdf')
         sdf_values = torch.tensor(compute_sdf(mesh_points, boundaryPoints))
         print('sdf computed')
