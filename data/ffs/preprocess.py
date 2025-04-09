@@ -18,7 +18,6 @@ from csv_rw import csv_to_dict
 
 # import numpy as np
 from shapely.geometry import Point
-import alphashape
 
 def parse_args():
     parser = ArgumentParser()
@@ -30,22 +29,27 @@ def parse_args():
     return vars(parser.parse_args())
 
 
-def signed_distance(p, shape):
-    point = Point(p)
-    distance = point.distance(shape)
-    print(distance)
-    return -distance if shape.contains(point) else distance
+# import numpy as np
+# from shapely.geometry import Point, Polygon
 
-def sdf_mesh(mesh):
-    # # Load your point cloud CSV
-    # df = pd.read_csv("your_filename.csv")  # Replace with actual filename
-    # points_2d = df[['Points:0', 'Points:1']].values
+# # Define the obstacle shape (e.g., a step as a polygon)
+# step = Polygon([(0.5, 0.0), (0.5, 0.5), (1.0, 0.5), (1.0, 0.0)])  # 2D forward-facing step
+2
+# # Your point cloud: Nx2 array of (x, y) coordinates
+# point_cloud = np.random.rand(1000, 2)  # Replace with your data
 
-    # Generate alpha shape (boundary approximation)
-    alpha = 0.01  # Adjust this value if needed (lower = tighter boundary)
-    alpha_shape = alphashape.alphashape(mesh, alpha)
+# def signed_distance(p, shape):
+#     point = Point(p)
+#     distance = point.distance(shape)
+#     # Negative if inside the shape
+#     if shape.contains(point):
+#         return -distance
+#     else:
+#         return distance
 
-    return [signed_distance(p, alpha_shape) for p in mesh]
+# # Compute signed distances
+# sdf_values = np.array([signed_distance(p, step) for p in point_cloud])
+
 
 def main(src, dst, save_normalization_param=True):
     src = Path(src).expanduser()
