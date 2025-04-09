@@ -15,6 +15,8 @@ class ffsDataset(Dataset):
             num_outputs,
             # train or test
             mode,
+            crop_values = None,
+            # crop_values = [[x_min, y_min], [x_max, y_max]],
     ):
         super().__init__()
         root = Path(root).expanduser()
@@ -22,11 +24,16 @@ class ffsDataset(Dataset):
         self.num_inputs = num_inputs
         self.num_outputs = num_outputs
         self.mode = mode
+        self.crop_values = crop_values
 
         # define spatial min/max of simulation (for normalizing to [0, 1] and then scaling to [0, 200] for pos_embed)
-        normCoord = torch.load(self.root / 'coords_norm.th', weights_only=True)
-        self.domain_min = normCoord['min_coords']
-        self.domain_max = normCoord['max_coords']
+        if self.crop_values is None:
+            normCoord = torch.load(self.root / 'coords_norm.th', weights_only=True)
+            self.domain_min = normCoord['min_coords']
+            self.domain_max = normCoord['max_coords']
+        else:
+            self.domain_min = torch.tensor(self.crop_values[0]).squeeze(0)
+            self.domain_max = torch.tensor(self.crop_values[1]).squeeze(0)
         self.scale = 200
 
         # mean/std for normalization (calculated on the train samples)
@@ -50,9 +57,8 @@ class ffsDataset(Dataset):
             if sampleDir.is_dir():
                 self.uris.append(sampleDir)
                 if int(name.split("_")[0].replace('DP', '')) > 100:
-                    self.TEST_INDICES.append(len(self.uris))
+                    self.TEST_INDICES.append(len(self.uris)-1)
         
-
         # split into train/test uris
         if self.mode == "train":
             train_idxs = [i for i in range(len(self.uris)) if i not in self.TEST_INDICES]
@@ -67,58 +73,79 @@ class ffsDataset(Dataset):
     def __len__(self):
         return len(self.uris)
 
-    def getitem_u(self, idx):
-        u = torch.load(self.uris[idx] / "u.th", weights_only=True)
-        u -= self.mean[0]
-        u /= self.std[0]
-        return u
+    # def getitem_u(self, idx):
+    #     u = torch.load(self.uris[idx] / "u.th", weights_only=True)
+    #     u -= self.mean[0]
+    #     u /= self.std[0]
+    #     return u
     
-    def getitem_v(self, idx):
-        v = torch.load(self.uris[idx] / "v.th", weights_only=True)
-        v -= self.mean[1]
-        v /= self.std[1]
-        return v
+    # def getitem_v(self, idx):
+    #     v = torch.load(self.uris[idx] / "v.th", weights_only=True)
+    #     v -= self.mean[1]
+    #     v /= self.std[1]
+    #     return v
     
-    def getitem_p(self, idx):
-        p = torch.load(self.uris[idx] / "p.th", weights_only=True)
-        p -= self.mean[2]
-        p /= self.std[2]
-        return p
+    # def getitem_p(self, idx):
+    #     p = torch.load(self.uris[idx] / "p.th", weights_only=True)
+    #     p -= self.mean[2]
+    #     p /= self.std[2]
+    #     return p
     
-    def getitem_re(self, idx):
-        re = float(str(self.uris[idx]).split('/')[-1].split('-')[0].split('_')[-1].replace(',', '.'))
-        re -= 550
-        re /= 260
-        return re
+    # def getitem_re(self, idx):
+    #     re = float(str(self.uris[idx]).split('/')[-1].split('-')[0].split('_')[-1].replace(',', '.'))
+    #     re -= 550
+    #     re /= 260
+    #     return re
     
-    def getitem_all_pos(self, idx):
-        all_pos = torch.load(self.uris[idx] / "mesh_points.th", weights_only=True)
-        # rescale for sincos positional embedding
-        all_pos.sub_(self.domain_min).div_(self.domain_max - self.domain_min).mul_(self.scale)
-        assert torch.all(0 <= all_pos)
-        assert torch.all(all_pos <= self.scale)
-        return all_pos
+    # def getitem_all_pos(self, idx):
+    #     all_pos = torch.load(self.uris[idx] / "mesh_points.th", weights_only=True)
+    #     # rescale for sincos positional embedding
+    #     all_pos.sub_(self.domain_min).div_(self.domain_max - self.domain_min).mul_(self.scale)
+    #     assert torch.all(0 <= all_pos)
+    #     assert torch.all(all_pos <= self.scale)
+    #     return all_pos
 
-    def denormalize_pos(self, pos, pred):
+    def normalize_pos(self, pos):
+        # normalize the position
+        pos = pos.sub_(self.domain_min).div_(self.domain_max - self.domain_min).mul_(self.scale)
+        assert torch.all(0 <= pos)
+        assert torch.all(pos <= self.scale)
+        return pos
+    
+    def denormalize_pos(self, pos):
         # denormalize the position
         pos = pos.div_(self.scale).mul_(self.domain_max - self.domain_min).add_(self.domain_min)
         return pos
 
-    def denormalize_feat(self, pos, feat):
+    def normalize_feat(self, feat):
+        # normalize the prediction
+        feat = feat.sub_(self.mean).div_(self.std)
+        return feat
+    
+    def denormalize_feat(self, feat):
         # denormalize the prediction
         feat = feat.mul_(self.std).add_(self.mean)
         return feat
 
     def __getitem__(self, idx):
-        u = self.getitem_u(idx)
-        v = self.getitem_v(idx)
-        p = self.getitem_p(idx)
-        re = self.getitem_re(idx)
-
+        # load mesh points and targets (u, v, p)
+        mesh_pos = torch.load(self.uris[idx] / "mesh_points.th", weights_only=True)
+        u = torch.load(self.uris[idx] / "u.th", weights_only=True)
+        v = torch.load(self.uris[idx] / "v.th", weights_only=True)
+        p = torch.load(self.uris[idx] / "p.th", weights_only=True)
         target = torch.cat((u, v, p), dim=1)
+        re = float(str(self.uris[idx]).split('/')[-1].split('-')[0].split('_')[-1].replace(',', '.'))
 
-        mesh_pos = self.getitem_all_pos(idx)
+        # Filter mesh_pos and target based on self.domain_min and self.domain_max
+        mask = (mesh_pos[:, 0] >= self.domain_min[0]) & (mesh_pos[:, 0] <= self.domain_max[0]) & \
+               (mesh_pos[:, 1] >= self.domain_min[1]) & (mesh_pos[:, 1] <= self.domain_max[1])
+        mesh_pos = mesh_pos[mask]
+        target = target[mask]
 
+        # normalize
+        mesh_pos = self.normalize_pos(mesh_pos)
+        target = self.normalize_feat(target)
+        re = (re - 550) / 260
 
         # subsample random input pixels (locations of inputs and outputs does not have to be the same)
         if self.num_inputs != float("inf"):
@@ -153,4 +180,5 @@ class ffsDataset(Dataset):
             target_feat=target_feat,
             output_pos=output_pos,
             re=re,
+            name=str(self.uris[idx]).split('/')[-1],
         )

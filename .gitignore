@@ -8,7 +8,8 @@
 *.bkp
 *.dtmp
 
-data/
+wandb/
+data/ffs/preprocessed/
 yamls_run/
 temp/
 sbatch_config.yaml
