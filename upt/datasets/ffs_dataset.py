@@ -78,12 +78,12 @@ class ffsDataset(Dataset):
 
     def normalize_feat(self, feat):
         # normalize the prediction
-        feat = feat.sub_(self.mean[:-1]).div_(self.std[:-1])
+        feat = feat.sub_((self.mean[:-1])).div_((self.std[:-1]))
         return feat
     
     def denormalize_feat(self, feat):
         # denormalize the prediction
-        feat = feat.mul_(self.std[:-1]).add_(self.mean[:-1])
+        feat = feat.mul_((self.std[:-1])).add_((self.mean[:-1]))
         return feat
 
     def __getitem__(self, idx):
@@ -110,7 +110,7 @@ class ffsDataset(Dataset):
         mesh_pos = self.normalize_pos(mesh_pos)
         target = self.normalize_feat(target)
         re = (re - 550) / 260
-        # sdf = (sdf - self.mean[-1]) / self.std[-1]
+        sdf = (sdf - self.mean[-1]) / self.std[-1]
 
         # subsample random input pixels (locations of inputs and outputs does not have to be the same)
         if self.num_inputs != float("inf"):
