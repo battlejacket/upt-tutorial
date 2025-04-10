@@ -9,6 +9,7 @@
 *.dtmp
 
 wandb/
+save/
 data/ffs/preprocessed/**
 !data/ffs/preprocessed/**/
 !data/ffs/preprocessed/**/mesh_sdf.th
