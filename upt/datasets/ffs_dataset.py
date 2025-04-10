@@ -137,13 +137,13 @@ class ffsDataset(Dataset):
         re = float(str(self.uris[idx]).split('/')[-1].split('-')[0].split('_')[-1].replace(',', '.'))
         sdf = torch.load(self.uris[idx] / "mesh_sdf.th", weights_only=True)
 
-        # Filter mesh_pos and target based on self.domain_min and self.domain_max
-        mask = (mesh_pos[:, 0] >= self.domain_min[0]) & (mesh_pos[:, 0] <= self.domain_max[0]) & \
-               (mesh_pos[:, 1] >= self.domain_min[1]) & (mesh_pos[:, 1] <= self.domain_max[1])
-        mesh_pos = mesh_pos[mask]
-        target = target[mask]
-        input_feat = sdf[mask]
-        # input_feat=torch.ones_like(input_pos),
+        if self.crop_values is not None:
+            # Filter mesh_pos, input_feat and target based on self.domain_min and self.domain_max
+            mask = (mesh_pos[:, 0] >= self.domain_min[0]) & (mesh_pos[:, 0] <= self.domain_max[0]) & \
+                (mesh_pos[:, 1] >= self.domain_min[1]) & (mesh_pos[:, 1] <= self.domain_max[1])
+            mesh_pos = mesh_pos[mask]
+            target = target[mask]
+            sdf = sdf[mask]
 
         # normalize
         mesh_pos = self.normalize_pos(mesh_pos)
@@ -156,12 +156,13 @@ class ffsDataset(Dataset):
                 rng = None
             else:
                 rng = torch.Generator().manual_seed(idx)
+            
             input_perm = torch.randperm(len(mesh_pos), generator=rng)[:self.num_inputs]
-            # input_feat = x[input_perm]
-            input_pos = mesh_pos[input_perm].clone()
+            input_feat = sdf[input_perm]
+            input_pos = mesh_pos[input_perm] #.clone()
         else:
-            # input_feat = x
-            input_pos = mesh_pos.clone()
+            input_feat = sdf
+            input_pos = mesh_pos #.clone()
 
         # subsample random output pixels (locations of inputs and outputs does not have to be the same)
         if self.num_outputs != float("inf"):
@@ -171,10 +172,10 @@ class ffsDataset(Dataset):
                 rng = torch.Generator().manual_seed(idx + 1)
             output_perm = torch.randperm(len(target), generator=rng)[:self.num_outputs]
             target_feat = target[output_perm]
-            output_pos = mesh_pos[output_perm].clone()
+            output_pos = mesh_pos[output_perm] #.clone()
         else:
             target_feat = target
-            output_pos = mesh_pos.clone()
+            output_pos = mesh_pos #.clone()
         
         return dict(
             index=idx,

@@ -138,7 +138,9 @@ def main(src, dst, save_normalization_param=True):
         sdf_values = torch.tensor(compute_sdf(mesh_points, boundaryPoints))
         print('sdf computed')
         torch.save(sdf_values, out / "mesh_sdf.th")
-
+        sum_vars[-1] += sdf_values.sum()
+        sum_sq_vars[-1] += (sdf_values ** 2).sum()
+        total_samples += sdf_values.numel()
 
     if save_normalization_param:
         # Calculate mean and std
