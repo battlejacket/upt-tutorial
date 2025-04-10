@@ -54,7 +54,7 @@ def compute_sdf(mesh_points, boundary_points):
     sdf_values = np.array([signed_distance(p, boundary) for p in mesh_points])
     return sdf_values
 
-def main(src, dst, save_normalization_param=True):
+def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
     src = Path(src).expanduser()
     assert src.exists(), f"'{src.as_posix()}' doesnt exist"
     # assert src.name == "training_data"
@@ -121,26 +121,28 @@ def main(src, dst, save_normalization_param=True):
             torch.save(data, out / f"{outVar}.th")
             sum_vars[i] += data.sum()
             sum_sq_vars[i] += (data ** 2).sum()
-            total_samples += data.numel()
+        total_samples += data.numel()
 
-        # sdf
-        # Read boundary points csv
-        boundaryCsvFile = str(uri).split('_')[0].replace('CSV', 'boundary') + '_bound.csv'
-        print(f"boundaryCsvFile: {boundaryCsvFile}")
-        boundaryCsvDict = csv_to_dict(boundaryCsvFile, mapping=mapping, delimiter=",", skiprows=skiprows)
-        for key in dictVarNames:
-            boundaryCsvDict[key] += scales[key][0]
-            boundaryCsvDict[key] /= scales[key][1]
-        boundaryPoints = np.concat([boundaryCsvDict["x"], boundaryCsvDict["y"]], axis=1)
+        if compute_sdf_values:
 
-        # Save sdf3
-        print('computing sdf')
-        sdf_values = torch.tensor(compute_sdf(mesh_points, boundaryPoints)).float()
-        print('sdf computed')
-        torch.save(sdf_values, out / "mesh_sdf.th")
-        sum_vars[-1] += sdf_values.sum()
-        sum_sq_vars[-1] += (sdf_values ** 2).sum()
-        total_samples += sdf_values.numel()
+            # sdf
+            # Read boundary points csv
+            boundaryCsvFile = str(uri).split('_')[0].replace('CSVvalidation', 'boundary') + '_bound.csv'
+            print(f"boundaryCsvFile: {boundaryCsvFile}")
+            boundaryCsvDict = csv_to_dict(boundaryCsvFile, mapping=mapping, delimiter=",", skiprows=skiprows)
+            for key in dictVarNames:
+                boundaryCsvDict[key] += scales[key][0]
+                boundaryCsvDict[key] /= scales[key][1]
+            boundaryPoints = np.concat([boundaryCsvDict["x"], boundaryCsvDict["y"]], axis=1)
+
+            # Save sdf3
+            print('computing sdf')
+            sdf_values = torch.tensor(compute_sdf(mesh_points, boundaryPoints)).float()
+            print('sdf computed')
+            torch.save(sdf_values, out / "mesh_sdf.th")
+            sum_vars[-1] += sdf_values.sum()
+            sum_sq_vars[-1] += (sdf_values ** 2).sum()
+            # total_samples += sdf_values.numel()
 
     if save_normalization_param:
         # Calculate mean and std
@@ -156,4 +158,4 @@ def main(src, dst, save_normalization_param=True):
 
 if __name__ == "__main__":
     # main(**parse_args())
-    main('./data/ffs/CSV/', './data/ffs/preprocessed/', True)
+    main('./data/ffs/CSV/', './data/ffs/preprocessed/', compute_sdf_values=False, save_normalization_param=True)
