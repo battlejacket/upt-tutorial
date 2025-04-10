@@ -41,15 +41,6 @@ class ffsDataset(Dataset):
         self.mean = normVars['mean']
         self.std = normVars['std']
 
-        # # discover simulations
-        # self.case_names = list(sorted(os.listdir(root)))
-        # self.num_timesteps = len(
-        #     [
-        #         fname for fname in os.listdir(root / self.case_names[0])
-        #         if fname.endswith("_mesh.th")
-        #     ],
-        # )
-
         self.uris = []
         self.TEST_INDICES = []
         for name in sorted(os.listdir(self.root)):
@@ -73,38 +64,6 @@ class ffsDataset(Dataset):
     def __len__(self):
         return len(self.uris)
 
-    # def getitem_u(self, idx):
-    #     u = torch.load(self.uris[idx] / "u.th", weights_only=True)
-    #     u -= self.mean[0]
-    #     u /= self.std[0]
-    #     return u
-    
-    # def getitem_v(self, idx):
-    #     v = torch.load(self.uris[idx] / "v.th", weights_only=True)
-    #     v -= self.mean[1]
-    #     v /= self.std[1]
-    #     return v
-    
-    # def getitem_p(self, idx):
-    #     p = torch.load(self.uris[idx] / "p.th", weights_only=True)
-    #     p -= self.mean[2]
-    #     p /= self.std[2]
-    #     return p
-    
-    # def getitem_re(self, idx):
-    #     re = float(str(self.uris[idx]).split('/')[-1].split('-')[0].split('_')[-1].replace(',', '.'))
-    #     re -= 550
-    #     re /= 260
-    #     return re
-    
-    # def getitem_all_pos(self, idx):
-    #     all_pos = torch.load(self.uris[idx] / "mesh_points.th", weights_only=True)
-    #     # rescale for sincos positional embedding
-    #     all_pos.sub_(self.domain_min).div_(self.domain_max - self.domain_min).mul_(self.scale)
-    #     assert torch.all(0 <= all_pos)
-    #     assert torch.all(all_pos <= self.scale)
-    #     return all_pos
-
     def normalize_pos(self, pos):
         # normalize the position
         pos = pos.sub_(self.domain_min).div_(self.domain_max - self.domain_min).mul_(self.scale)
@@ -119,12 +78,12 @@ class ffsDataset(Dataset):
 
     def normalize_feat(self, feat):
         # normalize the prediction
-        feat = feat.sub_(self.mean).div_(self.std)
+        feat = feat.sub_(self.mean[:-1]).div_(self.std[:-1])
         return feat
     
     def denormalize_feat(self, feat):
         # denormalize the prediction
-        feat = feat.mul_(self.std).add_(self.mean)
+        feat = feat.mul_(self.std[:-1]).add_(self.mean[:-1])
         return feat
 
     def __getitem__(self, idx):
@@ -151,6 +110,7 @@ class ffsDataset(Dataset):
         mesh_pos = self.normalize_pos(mesh_pos)
         target = self.normalize_feat(target)
         re = (re - 550) / 260
+        # sdf = (sdf - self.mean[-1]) / self.std[-1]
 
         # subsample random input pixels (locations of inputs and outputs does not have to be the same)
         if self.num_inputs != float("inf"):
