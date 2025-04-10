@@ -137,7 +137,7 @@ class ffsDataset(Dataset):
         re = float(str(self.uris[idx]).split('/')[-1].split('-')[0].split('_')[-1].replace(',', '.'))
         sdf = torch.load(self.uris[idx] / "mesh_sdf.th", weights_only=True).unsqueeze(1).float()
         # sdf = torch.ones_like(sdf)
-        # sdf = torch.zeros_like(sdf)
+        sdf = torch.zeros_like(sdf)
         
         if self.crop_values is not None:
             # Filter mesh_pos, input_feat and target based on self.domain_min and self.domain_max
