@@ -135,7 +135,7 @@ def main(src, dst, save_normalization_param=True):
 
         # Save sdf3
         print('computing sdf')
-        sdf_values = torch.tensor(compute_sdf(mesh_points, boundaryPoints))
+        sdf_values = torch.tensor(compute_sdf(mesh_points, boundaryPoints)).float()
         print('sdf computed')
         torch.save(sdf_values, out / "mesh_sdf.th")
         sum_vars[-1] += sdf_values.sum()
