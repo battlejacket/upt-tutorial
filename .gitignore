@@ -9,8 +9,9 @@
 *.dtmp
 
 wandb/
-data/ffs/preprocessed/
-!data/ffs/preprocessed/*/mesh_sdf.th
+data/ffs/preprocessed/**
+!data/ffs/preprocessed/**/
+!data/ffs/preprocessed/**/mesh_sdf.th
 yamls_run/
 temp/
 sbatch_config.yaml
