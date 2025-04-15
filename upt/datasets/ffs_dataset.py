@@ -77,24 +77,30 @@ class ffsDataset(Dataset):
         return pos
 
     def normalize_feat(self, feat):
-        # normalize the prediction
         feat = feat.sub_((self.mean[:-1])).div_((self.std[:-1]))
         return feat
     
     def denormalize_feat(self, feat):
-        # denormalize the prediction
         feat = feat.mul_((self.std[:-1])).add_((self.mean[:-1]))
         return feat
     
     def normalize_sdf(self, sdf):
-        sdf = sdf.sub_((self.mean[:-1])).div_((self.std[:-1]))
+        sdf = sdf.sub_((self.mean[-1])).div_((self.std[-1]))
         # sdf = (sdf - self.mean[-1]) / self.std[-1]
         return sdf
         
     def denormalize_sdf(self, sdf):
-        sdf = sdf.mul_((self.std[:-1])).add_((self.mean[:-1]))
+        sdf = sdf.mul_((self.std[-1])).add_((self.mean[-1]))
         # sdf = sdf*self.std[-1] + self.mean[-1]
         return sdf
+    
+    def normalize_re(self, re):
+        re = (re - 550) / 260
+        return re
+        
+    def denormalize_re(self, re):
+        re = (re * 260) + 550
+        return re
 
     def __getitem__(self, idx):
         # load mesh points and targets (u, v, p)
@@ -119,7 +125,7 @@ class ffsDataset(Dataset):
         # normalize
         mesh_pos = self.normalize_pos(mesh_pos)
         target = self.normalize_feat(target)
-        re = (re - 550) / 260
+        re = self.normalize_re(re)
         sdf = self.normalize_sdf(sdf)
 
         # subsample random input pixels (locations of inputs and outputs does not have to be the same)
