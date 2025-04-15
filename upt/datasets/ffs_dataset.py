@@ -36,7 +36,7 @@ class ffsDataset(Dataset):
             self.domain_max = torch.tensor(self.crop_values[1]).squeeze(0)
         self.scale = 200
 
-        # mean/std for normalization (calculated on the train samples)
+        # mean/std for normalization (calculated during preprocessing) (u,v,p,sdf)
         normVars = torch.load(self.root / 'vars_norm.th', weights_only=True)
         self.mean = normVars['mean']
         self.std = normVars['std']
@@ -85,6 +85,16 @@ class ffsDataset(Dataset):
         # denormalize the prediction
         feat = feat.mul_((self.std[:-1])).add_((self.mean[:-1]))
         return feat
+    
+    def normalize_sdf(self, sdf):
+        sdf = sdf.sub_((self.mean[:-1])).div_((self.std[:-1]))
+        # sdf = (sdf - self.mean[-1]) / self.std[-1]
+        return sdf
+        
+    def denormalize_sdf(self, sdf):
+        sdf = sdf.mul_((self.std[:-1])).add_((self.mean[:-1]))
+        # sdf = sdf*self.std[-1] + self.mean[-1]
+        return sdf
 
     def __getitem__(self, idx):
         # load mesh points and targets (u, v, p)
@@ -110,7 +120,7 @@ class ffsDataset(Dataset):
         mesh_pos = self.normalize_pos(mesh_pos)
         target = self.normalize_feat(target)
         re = (re - 550) / 260
-        sdf = (sdf - self.mean[-1]) / self.std[-1]
+        sdf = self.normalize_sdf(sdf)
 
         # subsample random input pixels (locations of inputs and outputs does not have to be the same)
         if self.num_inputs != float("inf"):
