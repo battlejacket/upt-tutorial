@@ -65,33 +65,29 @@ class ffsDataset(Dataset):
         return len(self.uris)
 
     def normalize_pos(self, pos):
-        # normalize the position
-        pos = pos.sub_(self.domain_min).div_(self.domain_max - self.domain_min).mul_(self.scale)
+        pos = pos.sub(self.domain_min).div(self.domain_max - self.domain_min).mul(self.scale)
         assert torch.all(0 <= pos)
         assert torch.all(pos <= self.scale)
         return pos
     
     def denormalize_pos(self, pos):
-        # denormalize the position
-        pos = pos.div_(self.scale).mul_(self.domain_max - self.domain_min).add_(self.domain_min)
+        pos = pos.div(self.scale).mul(self.domain_max - self.domain_min).add(self.domain_min)
         return pos
 
     def normalize_feat(self, feat):
-        feat = feat.sub_((self.mean[:-1])).div_((self.std[:-1]))
+        feat = feat.sub(self.mean[:-1]).div(self.std[:-1])
         return feat
     
     def denormalize_feat(self, feat):
-        feat = feat.mul_((self.std[:-1])).add_((self.mean[:-1]))
+        feat = feat.mul(self.std[:-1]).add(self.mean[:-1])
         return feat
     
     def normalize_sdf(self, sdf):
-        sdf = sdf.sub_((self.mean[-1])).div_((self.std[-1]))
-        # sdf = (sdf - self.mean[-1]) / self.std[-1]
+        sdf = sdf.sub(self.mean[-1]).div(self.std[-1])
         return sdf
         
     def denormalize_sdf(self, sdf):
-        sdf = sdf.mul_((self.std[-1])).add_((self.mean[-1]))
-        # sdf = sdf*self.std[-1] + self.mean[-1]
+        sdf = sdf.mul(self.std[-1]).add(self.mean[-1])
         return sdf
     
     def normalize_re(self, re):
