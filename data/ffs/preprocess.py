@@ -127,7 +127,7 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
 
             # sdf
             # Read boundary points csv
-            boundaryCsvFile = str(uri).split('_')[0].replace('CSVvalidation', 'boundary') + '_bound.csv'
+            boundaryCsvFile = str(uri).split('_')[0].replace('CSV600', 'boundary600') + '_bound.csv'
             print(f"boundaryCsvFile: {boundaryCsvFile}")
             boundaryCsvDict = csv_to_dict(boundaryCsvFile, mapping=mapping, delimiter=",", skiprows=skiprows)
             for key in dictVarNames:
@@ -158,4 +158,4 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
 
 if __name__ == "__main__":
     # main(**parse_args())
-    main('./data/ffs/CSV/', './data/ffs/preprocessed/', compute_sdf_values=False, save_normalization_param=True)
+    main('./data/ffs/CSV600/', './data/ffs/preprocessed600/', compute_sdf_values=True, save_normalization_param=True)

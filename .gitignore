@@ -10,6 +10,9 @@
 
 wandb/
 save/
+data/ffs/CSV600/
+data/ffs/boundary600/
+data/ffs/preprocessed600/
 data/ffs/preprocessed/**
 !data/ffs/preprocessed/**/
 !data/ffs/preprocessed/**/mesh_sdf.th
