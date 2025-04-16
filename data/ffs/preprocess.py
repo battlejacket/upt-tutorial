@@ -148,15 +148,12 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
 
             parameters = str(uri).split('_')[1].replace('.csv', '').replace(',', '.').split('-')
             # re = float(parameters[0])
-            Ho = float(parameters[1])
-            Lo = float(parameters[2])
+            Lo = float(parameters[1])
+            Ho = float(parameters[2])
 
             # Compute and store baseline SDF
             geo = ffsGeo(Ho=Ho, Lo=Lo)
-            print('computing sdf')
             sdf_values = torch.tensor([signed_distance(p, geo) for p in mesh_points]).float()
-            print('sdf computed')
-
 
             # sdf
             # Read boundary points csv

@@ -19,7 +19,7 @@ class ffsInference:
         else: 
             self.xMax = xMax
 
-    def ffsGeo(self, Ho, Lo):
+    def ffsGeo(self, Lo, Ho):
         xMax = 12
         xMin = -6
         Wo = 0.1
@@ -38,7 +38,7 @@ class ffsInference:
         d = pt.distance(shape['boundary'])
         return d if shape['geo'].contains(pt) else -d
 
-    def evalPointCloud(self, xMin, xMax, Ho, Lo):
+    def evalPointCloud(self, xMin, xMax, Lo, Ho):
         # Generate the full point cloud
         aspect = (xMax - xMin) / 1
         Ny = int(np.sqrt(self.totalPoints / aspect))
@@ -50,7 +50,7 @@ class ffsInference:
         points = np.stack([X.ravel(), Y.ravel()], axis=1)
 
         # Compute SDF
-        geo = self.ffsGeo(Ho=Ho, Lo=Lo)
+        geo = self.ffsGeo(Lo=Lo, Ho=Ho)
         sdf = np.array([self.signed_distance(p, geo) for p in points])
 
         mask = (sdf >= 0)
@@ -62,16 +62,19 @@ class ffsInference:
             'input_pos': torch.tensor(insidePoints, dtype=torch.float32)
         }
 
-    def preprocess(self, Ho, Lo, re_value):
+    def preprocess(self, re_value, Lo, Ho, idx):
         pointCloud = self.evalPointCloud(
             xMin=self.xMin,
             xMax=self.xMax,
-            Ho=Ho, Lo=Lo
+            Lo=Lo,
+            Ho=Ho
         )
         input_feat = self.train_dataset.normalize_sdf(pointCloud['input_feat'])
+        # input_len = len(input_feat) 
         input_pos = self.train_dataset.normalize_pos(pointCloud['input_pos'])
         re = self.train_dataset.normalize_re(torch.tensor([re_value]))
         supernode_idxs = torch.randperm(len(input_feat))[:self.numSupernodes]
+        # batch_idx = torch.full((input_len,), idx, dtype=torch.int32)
         batch_idx = torch.zeros(len(input_feat), dtype=torch.int32)
         return {
             'input_feat': input_feat.unsqueeze(1),
@@ -82,12 +85,15 @@ class ffsInference:
             're': re
         }
 
+    
     def infer(self, parameter_sets, output_pos=None):
         results = []
-        for Ho, Lo, re_value in parameter_sets:
-            batch = self.preprocess(Ho, Lo, re_value)
-            if output_pos == None:
-                output_pos = batch['output_pos']
+        idx = 0
+        for re_value, Lo, Ho in parameter_sets:
+            batch = self.preprocess(re_value, Lo, Ho, idx)
+            
+            # Ensure output_pos is unique for each parameter set
+            current_output_pos = output_pos if output_pos is not None else batch['output_pos']
 
             with torch.no_grad():
                 y_hat = self.model(
@@ -95,11 +101,12 @@ class ffsInference:
                     input_pos=batch['input_pos'].to(self.device),
                     supernode_idxs=batch['supernode_idxs'].to(self.device),
                     batch_idx=batch['batch_idx'].to(self.device),
-                    output_pos=output_pos.to(self.device),
+                    output_pos=current_output_pos.to(self.device),
                     re=batch['re'].to(self.device),
                 )
-                result = dict(parameters={'Ho': Ho, 'Lo': Lo, 're': re_value},
-                              points=self.train_dataset.denormalize_pos(output_pos.squeeze()),
-                              prediction=self.train_dataset.denormalize_feat(y_hat.cpu()))
+                result = dict(parameters={ 're': re_value, 'Lo': Lo, 'Ho': Ho},
+                            points=self.train_dataset.denormalize_pos(current_output_pos.squeeze()),
+                            prediction=self.train_dataset.denormalize_feat(y_hat.cpu()))
                 results.append(result)
+                idx += 1
         return results
