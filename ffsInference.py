@@ -49,7 +49,7 @@ class ffsInference:
         X, Y = np.meshgrid(x, y)
         points = np.stack([X.ravel(), Y.ravel()], axis=1)
 
-        # Compute and store baseline SDF
+        # Compute SDF
         geo = self.ffsGeo(Ho=Ho, Lo=Lo)
         sdf = np.array([self.signed_distance(p, geo) for p in points])
 
