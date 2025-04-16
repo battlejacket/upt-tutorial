@@ -3,13 +3,21 @@ import numpy as np
 import torch
 
 
-class InferencePipeline:
-    def __init__(self, model, train_dataset, totalPoints, numSupernodes, device):
+class ffsInference:
+    def __init__(self, model, train_dataset, totalPoints, numSupernodes, device, xMin = None, xMax = None):
         self.model = model
         self.train_dataset = train_dataset
         self.totalPoints = totalPoints
         self.numSupernodes = numSupernodes
         self.device = device
+        if xMin == None:
+            self.xMin = train_dataset.crop_values[0][0]
+        else: 
+            self.xMin = xMin
+        if xMax == None:
+            self.xMax = train_dataset.crop_values[1][0]
+        else: 
+            self.xMax = xMax
 
     def ffsGeo(self, Ho, Lo):
         xMax = 12
@@ -56,8 +64,8 @@ class InferencePipeline:
 
     def preprocess(self, Ho, Lo, re_value):
         pointCloud = self.evalPointCloud(
-            xMin=self.train_dataset.crop_values[0][0],
-            xMax=self.train_dataset.crop_values[1][0],
+            xMin=self.xMin,
+            xMax=self.xMax,
             Ho=Ho, Lo=Lo
         )
         input_feat = self.train_dataset.normalize_sdf(pointCloud['input_feat'])
@@ -74,18 +82,24 @@ class InferencePipeline:
             're': re
         }
 
-    def infer(self, parameter_sets):
+    def infer(self, parameter_sets, output_pos=None):
         results = []
         for Ho, Lo, re_value in parameter_sets:
             batch = self.preprocess(Ho, Lo, re_value)
+            if output_pos == None:
+                output_pos = batch['output_pos']
+
             with torch.no_grad():
                 y_hat = self.model(
                     input_feat=batch['input_feat'].to(self.device),
                     input_pos=batch['input_pos'].to(self.device),
                     supernode_idxs=batch['supernode_idxs'].to(self.device),
                     batch_idx=batch['batch_idx'].to(self.device),
-                    output_pos=batch['output_pos'].to(self.device),
+                    output_pos=output_pos.to(self.device),
                     re=batch['re'].to(self.device),
                 )
-                results.append(y_hat.cpu())
+                result = dict(parameters={'Ho': Ho, 'Lo': Lo, 're': re_value},
+                              points=self.train_dataset.denormalize_pos(output_pos.squeeze()),
+                              prediction=self.train_dataset.denormalize_feat(y_hat.cpu()))
+                results.append(result)
         return results
