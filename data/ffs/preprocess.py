@@ -146,7 +146,8 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
 
         if compute_sdf_values:
 
-            parameters = str(uri).split('_')[1].replace('.csv', '').replace(',', '.').split('-')
+            parameters = str(uri).split('DP')[1].replace('.csv', '').replace(',', '.').split('_')[1:]
+
             # re = float(parameters[0])
             Lo = float(parameters[1])
             Ho = float(parameters[2])
