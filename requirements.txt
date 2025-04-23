@@ -1,0 +1,25 @@
+# General tools
+jupyter
+matplotlib
+numpy
+PyYAML
+shapely
+zipp
+
+# PyTorch ecosystem
+torchmetrics
+
+# Domain-specific / utils
+torch-harmonics
+kappabenchmark
+kappaconfig
+kappautils
+kappamodules
+
+# ML utils
+scikit-learn
+wandb
+
+# Meshing 
+gmsh
+pygmsh
