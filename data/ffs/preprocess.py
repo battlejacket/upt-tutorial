@@ -179,7 +179,7 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
         # Calculate mean and std
         mean_vars = sum_vars / total_samples
         std_vars = torch.sqrt((sum_sq_vars / total_samples) - (mean_vars ** 2))
-
+        print(dst)
         # Save normalization parameters
         torch.save({"min_coords": min_coords, "max_coords": max_coords}, dst / "coords_norm.th")
         torch.save({"mean": mean_vars, "std": std_vars}, dst / "vars_norm.th")
@@ -189,4 +189,4 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
 
 if __name__ == "__main__":
     # main(**parse_args())
-    main('./data/ffs/CSV600/', './data/ffs/preprocessed600/', compute_sdf_values=True, save_normalization_param=True)
+    main('./data/ffs/CSV600/', './data/ffs/preprocessed600/', compute_sdf_values=False, save_normalization_param=True)
