@@ -60,10 +60,9 @@ class ffsDataset(Dataset):
             sampleDir = self.root / name
             if sampleDir.is_dir():
                 self.uris.append(sampleDir)
-                parameters = readParametersFromFileName(sampleDir.name, self.parameterDef)
-                re = parameters['re']        
-                if re > 100:
-                    self.TEST_INDICES.append(len(self.uris)-1)
+                # dp = sampleDir.name.split('_')[0].replace('DP', '')
+                # if int(dp) > 100:
+                #     self.TEST_INDICES.append(len(self.uris)-1)
         
         # split into train/test uris
         if self.mode == "train":
