@@ -40,15 +40,15 @@ class ffsInference:
         d = pt.distance(shape['boundary'])
         return d if shape['geo'].contains(pt) else -d
 
-    def generate_grid_points(self, xMin, xMax, Lo, Ho):
+    def generate_grid_points(self, Lo, Ho):
         """
         Generate a grid-based point cloud and compute the signed distance function (SDF).
         """
-        aspect = (xMax - xMin) / 1
+        aspect = (self.xMax - self.xMin) / 1
         Ny = int(np.sqrt(self.totalPoints / aspect))
         Nx = int(self.totalPoints / Ny)
 
-        x = np.linspace(xMin, xMax, Nx)
+        x = np.linspace(self.xMin, self.xMax, Nx)
         y = np.linspace(-0.5, 0.5, Ny)
         X, Y = np.meshgrid(x, y)
         points = np.stack([X.ravel(), Y.ravel()], axis=1)
@@ -62,65 +62,115 @@ class ffsInference:
 
         return insidePoints, insideSdf
 
-    def generate_mesh_points(self, Lo, Ho):
+    def generate_mesh_points(self, Lo, Ho, meshParameters):
         """
         Generate a mesh-based point cloud using pygmsh and compute the signed distance function (SDF).
         """
+        
+        
         geo = self.ffsGeo(Lo=Lo, Ho=Ho)
-        bPoints = geo['boundaryPoints']  # Reuse boundary points from ffsGeo
+        # Convert to list of [x, y]
+        bPoints = [list(p.coords)[0] for p in geo['boundaryPoints']]
 
         with pygmsh.geo.Geometry() as geom:
             poly = geom.add_polygon(
-                bPoints[:-1],  # Exclude the last point to avoid duplication
-                mesh_size=0.3,
+                bPoints[:-1], 
+                mesh_size=meshParameters['size'],
             )
 
             field0 = geom.add_boundary_layer(
-                edges_list=poly.curves[1:4],
-                lcmin=0.05,  # Min cell size
-                lcmax=0.2,  # Max cell size
-                distmin=0.0,  # Min wall distance
-                distmax=0.2,  # Max wall distance
+                edges_list=poly.curves,
+                lcmin=meshParameters['lcmin'],  # Min cell size
+                lcmax=meshParameters['lcmax'],  # Max cell size
+                distmin=meshParameters['distmin'],  # Min distance
+                distmax=meshParameters['distmax'],  # Max distance  
             )
 
             geom.set_background_mesh([field0], operator="Min")
             mesh = geom.generate_mesh()
-            points = mesh.points
-
+            points = mesh.points[:, :2]  # Get only x and y coordinates
+        
+        points = points[(points[:, 0] >= self.xMin) & (points[:, 0] <= self.xMax)]
         sdf = np.array([self.signed_distance(p, geo) for p in points])
 
-        mask = (sdf >= 0)
-        insidePoints = points[mask]
-        insideSdf = sdf[mask]
-
-        return insidePoints, insideSdf
-
-    def generate_point_cloud(self, xMin, xMax, Lo, Ho, useMesh=False):
+        return points, sdf
+    
+    def update_base_mesh(self, Lo, Ho, meshParameters):
         """
-        Generate a point cloud (grid-based or mesh-based) and compute the signed distance function (SDF).
+        Generate a mesh-based point cloud by updating a mesh from training data and compute the signed distance function (SDF).
         """
-        if useMesh:
-            return self.generate_mesh_points(Lo, Ho)
-        else:
-            return self.generate_grid_points(xMin, xMax, Lo, Ho)
+        geo = self.ffsGeo(Lo=Lo, Ho=Ho)
 
-    def preprocess(self, re_value, Lo, Ho, idx, useMesh=False):
+        # ToDo: Load mesh without the obstacle
+
+        Wo = 0.1
+        thichness = 0.1 
+        usx = -Lo - thichness
+        dsx = -Lo + Wo + thichness
+        y = 0.5 - Ho - thichness
+
+
+        bPoints = [
+            [usx, 0.5], [-Lo, 0.5], [-Lo, 0.5 - Ho],
+            [-Lo + Wo, 0.5 - Ho], [-Lo + Wo, 0.5], [dsx, 0.5],
+            [dsx, y], [usx, y]
+        ]
+
+
+        with pygmsh.geo.Geometry() as geom:
+            poly = geom.add_polygon(
+                bPoints, 
+                mesh_size=meshParameters['size'],
+            )
+
+            field0 = geom.add_boundary_layer(
+                edges_list=poly.curves[1:4],
+                lcmin=meshParameters['lcmin'],  # Min cell size
+                lcmax=meshParameters['lcmax'],  # Max cell size
+                distmin=meshParameters['distmin'],  # Min distance
+                distmax=meshParameters['distmax'],  # Max distance  
+            )
+
+            geom.set_background_mesh([field0], operator="Min")
+            mesh = geom.generate_mesh()
+            points = mesh.points[:, :2]  # Get only x and y coordinates
+
+            # ToDo: Create a mask to remove points surrounding the obstacle (within thickness) from the original mesh
+
+            # ToDo: Replace points surrounding the obstacle with the points from the new mesh
+        
+        points = points[(points[:, 0] >= self.xMin) & (points[:, 0] <= self.xMax)]
+        sdf = np.array([self.signed_distance(p, geo) for p in points])
+
+        return points, sdf
+
+    def preprocess(self, re_value, Lo, Ho, idx, useMesh=False, meshParameters=None):
         """
         Preprocess the input data by generating the point cloud and normalizing features.
         """
-        insidePoints, insideSdf = self.generate_point_cloud(
-            xMin=self.xMin,
-            xMax=self.xMax,
-            Lo=Lo,
-            Ho=Ho,
-            useMesh=useMesh
-        )
+        if useMesh:
+            points, sdf = self.update_base_mesh(
+                Lo=Lo,
+                Ho=Ho,
+                meshParameters=meshParameters
+            )
+        else:
+            points, sdf = self.generate_grid_points(
+                Lo=Lo,
+                Ho=Ho
+            )
 
-        input_feat = self.train_dataset.normalize_sdf(torch.tensor(insideSdf, dtype=torch.float32))
-        input_pos = self.train_dataset.normalize_pos(torch.tensor(insidePoints, dtype=torch.float32))
+        input_feat = self.train_dataset.normalize_sdf(torch.tensor(sdf, dtype=torch.float32))
+        input_pos = self.train_dataset.normalize_pos(torch.tensor(points, dtype=torch.float32))
         re = self.train_dataset.normalize_re(torch.tensor([re_value]))
         supernode_idxs = torch.randperm(len(input_feat))[:self.numSupernodes]
         batch_idx = torch.zeros(len(input_feat), dtype=torch.int32)
+
+        # input_feat = torch.tensor(sdf, dtype=torch.float32)
+        # input_pos = torch.tensor(points, dtype=torch.float32)
+        # re = torch.tensor([re_value])
+        # supernode_idxs = torch.randperm(len(input_feat))[:self.numSupernodes]
+        # batch_idx = torch.zeros(len(input_feat), dtype=torch.int32)
 
         return {
             'input_feat': input_feat.unsqueeze(1),
@@ -131,17 +181,19 @@ class ffsInference:
             're': re
         }
 
-    def infer(self, parameter_sets, output_pos=None, useMesh=False):
+    def infer(self, parameter_sets, output_pos=None, useMesh=False, meshParameters=None):
         """
         Perform inference for a set of parameters using the model.
         """
         if self.model is None or self.device is None:
             raise ValueError("Model and device must be assigned before calling infer.")
-
+        if useMesh and meshParameters is None:
+            raise ValueError("Mesh parameters must be provided when useMesh is True.")
+        
         results = []
         idx = 0
         for re_value, Lo, Ho in parameter_sets:
-            batch = self.preprocess(re_value, Lo, Ho, idx, useMesh=useMesh)
+            batch = self.preprocess(re_value, Lo, Ho, idx, useMesh=useMesh, meshParameters=meshParameters)
 
             current_output_pos = output_pos if output_pos is not None else batch['output_pos']
 
@@ -163,15 +215,18 @@ class ffsInference:
                 idx += 1
         return results
 
-    def get_batches(self, parameter_sets, useMesh=False):
+    def get_batches(self, parameter_sets, useMesh=False, meshParameters=None):
         """
-        Generate and return a list of batches for the given parameter sets.
+        Generate and return a list of batches (size 1) for the given parameter sets.
         This method does not require a model or device to be assigned.
         """
+        if useMesh and meshParameters is None:
+            raise ValueError("Mesh parameters must be provided when useMesh is True.")
+        
         batches = []
         idx = 0
         for re_value, Lo, Ho in parameter_sets:
-            batch = self.preprocess(re_value, Lo, Ho, idx, useMesh=useMesh)
+            batch = self.preprocess(re_value, Lo, Ho, idx, useMesh=useMesh, meshParameters=meshParameters)
             batches.append(batch)
             idx += 1
         return batches
