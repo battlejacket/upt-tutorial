@@ -3,16 +3,27 @@ FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
 
 # Install essential system packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    # --- Core dev tools ---
+    build-essential \
     git \
     curl \
     wget \
+    \
+    # --- Gmsh runtime dependencies (optional) ---
     libgl1 \
     libglu1-mesa \
-    build-essential \
-    libglu1-mesa \
     libx11-6 \
+    libxrender1 \
+    libxcursor1 \
+    libxft2 \
+    libxinerama1 \
     libice6 \
-    && rm -rf /var/lib/apt/lists/*
+    \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Note: The Gmsh-related libraries can be removed if you're not using gmsh or pygmsh. 
+# They are only required because the Gmsh Python SDK is linked against GUI-related X11 and OpenGL libraries even when used headlessly.
+
 
 # Set workdir
 WORKDIR /workspace
