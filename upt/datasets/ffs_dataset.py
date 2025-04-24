@@ -3,6 +3,7 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import Dataset
+from data.ffs.readParameters import readParametersFromFileName
 
 
 class ffsDataset(Dataset):
@@ -42,25 +43,25 @@ class ffsDataset(Dataset):
         self.std = normVars['std']
 
         self.uris = []
-        # self.TEST_INDICES = []
+        self.TEST_INDICES = []
         
             
-        self.TEST_INDICES = [445, 383, 382, 521, 163, 403, 143, 344, 487, 375, 338, 432, 472,  53,
-        451, 510,  78, 280,  62, 552,  50, 207, 282, 532, 291,  76, 332, 257,
-        489, 471,  38, 481, 151, 543, 401, 318, 167, 346,  92, 269,  85, 349,
-        587,  77,  55, 465, 562, 442, 161, 503, 364, 144, 412, 210, 231, 513,
-        295, 566, 217, 505, 406,  46, 501, 104, 365, 233,   0, 522,  11, 112,
-        28, 461, 308,  40, 572, 573, 565, 476, 293, 334, 111, 102, 398, 497,
-        91, 485, 317, 379, 370, 421, 260, 596, 141, 351, 423, 137,   9, 395,
-        578, 292, 553, 429, 147,  49, 544, 561, 214, 400, 183, 186, 343, 244,
-        281, 170, 277,  12, 134, 139, 106, 366]
+        # self.TEST_INDICES = [445, 383, 382, 521, 163, 403, 143, 344, 487, 375, 338, 432, 472,  53,
+        # 451, 510,  78, 280,  62, 552,  50, 207, 282, 532, 291,  76, 332, 257,
+        # 489, 471,  38, 481, 151, 543, 401, 318, 167, 346,  92, 269,  85, 349,
+        # 587,  77,  55, 465, 562, 442, 161, 503, 364, 144, 412, 210, 231, 513,
+        # 295, 566, 217, 505, 406,  46, 501, 104, 365, 233,   0, 522,  11, 112,
+        # 28, 461, 308,  40, 572, 573, 565, 476, 293, 334, 111, 102, 398, 497,
+        # 91, 485, 317, 379, 370, 421, 260, 596, 141, 351, 423, 137,   9, 395,
+        # 578, 292, 553, 429, 147,  49, 544, 561, 214, 400, 183, 186, 343, 244,
+        # 281, 170, 277,  12, 134, 139, 106, 366]
         
         for name in sorted(os.listdir(self.root)):
             sampleDir = self.root / name
             if sampleDir.is_dir():
                 self.uris.append(sampleDir)
-                # if int(name.split("_")[0].replace('DP', '')) > 100:
-                #     self.TEST_INDICES.append(len(self.uris)-1)
+                if int(name.split("_")[0].replace('DP', '')) > 100:
+                    self.TEST_INDICES.append(len(self.uris)-1)
         
         # split into train/test uris
         if self.mode == "train":
@@ -117,7 +118,7 @@ class ffsDataset(Dataset):
         v = torch.load(self.uris[idx] / "v.th", weights_only=True)
         p = torch.load(self.uris[idx] / "p.th", weights_only=True)
         target = torch.cat((u, v, p), dim=1)
-        re = float(str(self.uris[idx]).split('/')[-1].split('-')[0].split('_')[-1].replace(',', '.'))
+        re = float(str(self.uris[idx]).split('/')[-1].split('-')[0].split('_')[-1].replace(',', '.'))  #FIXA
         sdf = torch.load(self.uris[idx] / "mesh_sdf.th", weights_only=True).unsqueeze(1).float()
         # sdf = torch.ones_like(sdf)
         # sdf = torch.zeros_like(sdf)
