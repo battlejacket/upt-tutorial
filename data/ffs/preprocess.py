@@ -12,6 +12,7 @@ from tqdm import tqdm
 from csv_rw import csv_to_dict
 import networkx as nx
 from shapely.geometry import Point, LineString, Polygon
+from data.ffs.readParameters import readParametersFromFileName
 
 
 def parse_args():
@@ -88,13 +89,17 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
     
     
     # find all uris for samples
-    uris = []
-    for root, dirs, files in os.walk(src):
-        for file in files:
-            filePath = Path(os.path.join(root, file))
-            uris.append(filePath)
-    uris.sort()
-    print(f"found {len(uris)} samples")
+    # uris = []
+    # for root, dirs, files in os.walk(src):
+    #     for file in files:
+    #         filePath = Path(os.path.join(root, file))
+    #         uris.append(filePath)
+    # uris.sort()
+    # print(f"found {len(uris)} samples")
+
+
+    uris = sorted(src.rglob('*.csv'))  # recursively find all .csv files
+    print(f"Found {len(uris)} CSV files")
         
     # define csv parameters
     csvInvarNames = ["Points:0", "Points:1"]
@@ -145,8 +150,10 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
         total_samples += data.numel()
 
         if compute_sdf_values:
+            parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
+            parameters = readParametersFromFileName(uri.name, parameterDef)
 
-            parameters = str(uri).split('DP')[1].replace('.csv', '').replace(',', '.').split('_')[1:]
+            # parameters = str(uri).split('DP')[1].replace('.csv', '').replace(',', '.').split('_')[1:]
 
             # re = float(parameters[0])
             Lo = float(parameters[1])
