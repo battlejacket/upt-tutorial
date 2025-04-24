@@ -44,7 +44,7 @@ class ffsDataset(Dataset):
 
         self.uris = []
         # self.TEST_INDICES = []
-        parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
+        self.parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
             
         self.TEST_INDICES = [445, 383, 382, 521, 163, 403, 143, 344, 487, 375, 338, 432, 472,  53,
         451, 510,  78, 280,  62, 552,  50, 207, 282, 532, 291,  76, 332, 257,
@@ -60,7 +60,7 @@ class ffsDataset(Dataset):
             sampleDir = self.root / name
             if sampleDir.is_dir():
                 self.uris.append(sampleDir)
-                parameters = readParametersFromFileName(sampleDir.name, parameterDef)
+                parameters = readParametersFromFileName(sampleDir.name, self.parameterDef)
                 re = parameters['re']        
                 if re > 100:
                     self.TEST_INDICES.append(len(self.uris)-1)
@@ -120,7 +120,7 @@ class ffsDataset(Dataset):
         v = torch.load(self.uris[idx] / "v.th", weights_only=True)
         p = torch.load(self.uris[idx] / "p.th", weights_only=True)
         target = torch.cat((u, v, p), dim=1)
-        parameters = readParametersFromFileName(self.uris[idx].name, parameterDef)
+        parameters = readParametersFromFileName(self.uris[idx].name, self.parameterDef)
         re = parameters['re']
         sdf = torch.load(self.uris[idx] / "mesh_sdf.th", weights_only=True).unsqueeze(1).float()
         # sdf = torch.ones_like(sdf)
