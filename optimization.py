@@ -3,7 +3,6 @@ import dill
 import os, glob, io, time
 from os import listdir
 import csv
-from fwdFacingStep import ffs, param_ranges, Re, Ho, Lo, Um, rho
 from pymoo.optimize import minimize
 from pymoo.core.problem import Problem
 from pymoo.algorithms.moo.nsga2 import NSGA2
@@ -14,28 +13,27 @@ import contextlib
 from multiprocessing import Process
 from pymoo.termination.default import DefaultMultiObjectiveTermination
 
-class modulusOptProblem(Problem):
+from ffsInference import ffsInference
 
-    def __init__(self, n_var, n_obj, xl, xu, reNr, path):
+class ffsOptProblem(Problem):
+
+    def __init__(self, n_var, n_obj, xl, xu, re, inferencer: ffsInference, maxDesignsPerEvaluation=100):
         super().__init__(n_var=n_var, n_obj=n_obj, xl=xl, xu=xu)
         self.gen = 0
-        self.reynoldsNr= reNr
-        self.maxDesignsPerEvaluation = 100
-        self.path = path
-        # self.path = "./outputs/fwdFacingStep/data1800PlusPhysicsLambda01@500k"
-        self.configFileDir = self.path+"/conf/"
-        self.path_monitors = os.path.join(self.path, "monitors")
+        self.re = re
+        self.maxDesignsPerEvaluation = maxDesignsPerEvaluation
+        self.inferencer = inferencer
 
-    def readFile(self, fileDir, objective, design):
-        file = objective + "_design_" + str(design[0]) + ".csv"
-        with open(os.path.join(fileDir, file), "r") as datafile:
-            data = []
-            reader = csv.reader(datafile, delimiter=",")
-            for row in reader:
-                columns = [row[1]]
-                data.append(columns)
-            last_row = float(data[-1][0])
-            return np.array(last_row)
+    # def readFile(self, fileDir, objective, design):
+    #     file = objective + "_design_" + str(design[0]) + ".csv"
+    #     with open(os.path.join(fileDir, file), "r") as datafile:
+    #         data = []
+    #         reader = csv.reader(datafile, delimiter=",")
+    #         for row in reader:
+    #             columns = [row[1]]
+    #             data.append(columns)
+    #         last_row = float(data[-1][0])
+    #         return np.array(last_row)
 
     def _evaluate(self, allDesigns, out, *args, **kwargs):
         start_time = time.time()
@@ -47,111 +45,39 @@ class modulusOptProblem(Problem):
         tfFiles = glob.glob(os.path.join(self.path, "events.out.tfevents*"))
 
         valuesF = []
-        print("Generation " + str(self.gen) + ": Evaluating " + str(allDesigns.shape[0]) + " Designs in " + str(batches) + " Batches")
-        for designs in np.array_split(ary=allDesigns, indices_or_sections=batches):
-            # run modulus
-            with contextlib.redirect_stdout(io.StringIO()):
-                p = Process(target=ffs, args=(designs,self.reynoldsNr, self.configFileDir[2:], "config", True))
-                p.start()
-                p.join() 
-            # read result files
-            for design in enumerate(designs):
-                # read upstream pressure
-                objective = "upstreamPressure"
-                USP = self.readFile(fileDir = self.path_monitors, objective = objective, design = design)
-                # read downstream pressure
-                objective = "downstreamPressure"
-                DSP = self.readFile(fileDir = self.path_monitors, objective = objective, design = design)
-                valuesF.append(2*(USP-DSP)/(rho*Um**2))
+        print(f'Generation {str(self.gen)}: Evaluating {str(allDesigns.shape[0])} Designs in {str(batches)} Batches')
+        # print("Generation " + str(self.gen) + ": Evaluating " + str(allDesigns.shape[0]) + " Designs in " + str(batches) + " Batches")
+        
+        # Create points to use for inference, one line upsteam and one line downstream of the step
+        upstreamX = -3
+        downstreamX = 3
+        numPoints = 100
+        upstreamPoints = [[y, upstreamX] for y in np.linspace(-0.5, 0.5, numPoints)]
+        downstreamPoints = [[y, downstreamX] for y in np.linspace(-0.5, 0.5, numPoints)]
 
-            # remove old files
-            filePattern = "*.csv"
-            filePaths = glob.glob(os.path.join(self.path_monitors, filePattern))
-            for file_path in filePaths:
-                if "_design_" in file_path:
-                    os.remove(file_path)
-            
-            filePattern = "events.out.tfevents*"
-            filePaths = glob.glob(os.path.join(self.path, filePattern))
-            for file_path in filePaths:
-                if file_path not in tfFiles:
-                    os.remove(file_path)
+        # fluidParameters
+        rho = 1.0
+        Um = 1.0
+
+        for designs in np.array_split(ary=allDesigns, indices_or_sections=batches):
+            # Inference
+            # Create a column of c values with the same number of rows as a
+            re_column = np.full((allDesigns.shape[0], 1), self.re)
+
+            # Concatenate along the second axis (columns)
+            paramer_sets = np.concatenate((re_column, allDesigns), axis=1)
+
+            print(paramer_sets)
+
+            upstreamResults = self.inferencer.infer(parameter_sets=designs, output_pos=upstreamPoints)
+            downstreamResults = self.inferencer.infer(parameter_sets=designs, output_pos=downstreamPoints)
+
+            valuesF.append(2*(upstreamResults[2]-downstreamResults[2])/(rho*Um**2))
+
 
         out["F"] = np.array(valuesF)
         self.gen += 1
         elapsed_time = time.time() - start_time
         print("Evaluation time: ", elapsed_time)
 
-xl=np.array([float(param_ranges[Lo][0]),float(param_ranges[Ho][0])])
-xu=np.array([float(param_ranges[Lo][1]),float(param_ranges[Ho][1])])
 
-outputsPath="./outputs/fwdFacingStep/"
-dirSkip = [".hydra", "init", "initFC"] #, "data1800PlusPhysicsLambda1FC@500k", "data1800PlusPhysicsLambda01FC@500k", "dataOnly1800FC@500k", "physicsOnlyFC@500k"]
-
-optResultsPath = "./optimizationResults/"
-# optResultsPath = "./optimizationResultsReducedRange/"
-
-doneModels = listdir(optResultsPath)
-
-dirSkip += doneModels
-
-# models = ["data1800PlusPhysicsLambda01@500k"]
-models = listdir(outputsPath)
-models.sort()
-# models = ["physicsOnly@500k", "data1800PlusPhysicsLambda01@500k", ]
-
-print("model list")
-for model in models:
-    if model in dirSkip or "100k" in model.split("@")[-1] or "300k" in model.split("@")[-1]:
-        continue 
-    print(model)
-print("end model list")
-
-for model in models:
-    if model in dirSkip or "100k" in model.split("@")[-1] or "300k" in model.split("@")[-1]:
-    # if model in dirSkip:
-        print("skipping ", model)
-        continue
-        
-    path = outputsPath + model
-    optPath = optResultsPath + model
-    
-    reRange = range (300, 1100, 100)
-    
-    for reNr in reRange:
-
-        if os.path.exists(optPath + "/optResultsX" + str(reNr) + ".npy"):
-            print("skipping ", optPath + " " + str(reNr))
-            continue
-        
-        optStartTime = time.time()
-        
-        print("Optimizing: ", str(model) + " " + str(reNr))
-        
-        problem = modulusOptProblem(n_var=2,n_obj=1, xl=xl, xu=xu, reNr=reNr, path=path)
-
-        algorithm = DE(pop_size=200)
-
-        termination = DefaultMultiObjectiveTermination(
-            n_max_gen=1000, # default 1000
-            n_max_evals=10000000
-        )
-
-        results = minimize(problem=problem, algorithm=algorithm,termination=termination)
-
-        # with open("checkpoint", "wb") as f:
-        #     dill.dump(algorithm, f)
-
-
-        print("Optimization Done in ", time.time() - optStartTime)
-        print("Best Design Objective Value: ", results.F)
-        print("Best Design Parameter Value: ", results.X)
-
-        if not os.path.exists(optPath):
-            os.mkdir(optPath)
-            
-        np.save(file=optPath + "/popX" + str(problem.reynoldsNr), arr=results.pop.get("X"))
-        np.save(file=optPath + "/popF" + str(problem.reynoldsNr), arr=results.pop.get("F"))
-
-        np.save(file=optPath + "/optResultsF" + str(problem.reynoldsNr), arr=results.F)
-        np.save(file=optPath + "/optResultsX" + str(problem.reynoldsNr), arr=results.X)

@@ -12,7 +12,7 @@ from tqdm import tqdm
 from csv_rw import csv_to_dict
 import networkx as nx
 from shapely.geometry import Point, LineString, Polygon
-from data.ffs.readParameters import readParametersFromFileName
+from readParameters import readParametersFromFileName
 
 
 def parse_args():
@@ -196,4 +196,4 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
 
 if __name__ == "__main__":
     # main(**parse_args())
-    main('./data/ffs/CSV600/', './data/ffs/preprocessed600/', compute_sdf_values=False, save_normalization_param=True)
+    main('./data/ffs/baseMesh/', './data/ffs/baseMesh/', compute_sdf_values=False, save_normalization_param=False)
