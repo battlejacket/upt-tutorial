@@ -10,6 +10,8 @@ class ffsInference:
                   model = None, device = None, xMin = None, xMax = None, useMesh=None, meshParameters=None):
         
         self.model = model
+        self.useMesh = useMesh
+        self.meshParameters = meshParameters
         self.train_dataset = train_dataset
         self.totalPoints = totalPoints
         self.numSupernodes = numSupernodes
@@ -231,7 +233,7 @@ class ffsInference:
             batch = self.preprocess(re_value, Lo, Ho, idx)
 
             current_output_pos = output_pos if output_pos is not None else batch['output_pos']
-
+            print(re_value, Lo, Ho)
             with torch.no_grad():
                 y_hat = self.model(
                     input_feat=batch['input_feat'].to(self.device),

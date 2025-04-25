@@ -12,6 +12,7 @@ from pymoo.visualization.scatter import Scatter
 import contextlib
 from multiprocessing import Process
 from pymoo.termination.default import DefaultMultiObjectiveTermination
+import torch
 
 from ffsInference import ffsInference
 
@@ -41,8 +42,6 @@ class ffsOptProblem(Problem):
             batches = 1
         else:
             batches = int(allDesigns.shape[0]/self.maxDesignsPerEvaluation)
-        
-        tfFiles = glob.glob(os.path.join(self.path, "events.out.tfevents*"))
 
         valuesF = []
         print(f'Generation {str(self.gen)}: Evaluating {str(allDesigns.shape[0])} Designs in {str(batches)} Batches')
@@ -52,8 +51,8 @@ class ffsOptProblem(Problem):
         upstreamX = -3
         downstreamX = 3
         numPoints = 100
-        upstreamPoints = [[y, upstreamX] for y in np.linspace(-0.5, 0.5, numPoints)]
-        downstreamPoints = [[y, downstreamX] for y in np.linspace(-0.5, 0.5, numPoints)]
+        upstreamPoints = torch.tensor([[y, upstreamX] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32).unsqueeze(0)
+        downstreamPoints = torch.tensor([[y, downstreamX] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32).unsqueeze(0)
 
         # fluidParameters
         rho = 1.0
@@ -62,17 +61,20 @@ class ffsOptProblem(Problem):
         for designs in np.array_split(ary=allDesigns, indices_or_sections=batches):
             # Inference
             # Create a column of c values with the same number of rows as a
-            re_column = np.full((allDesigns.shape[0], 1), self.re)
+            re_column = np.full((designs.shape[0], 1), self.re)
 
             # Concatenate along the second axis (columns)
-            paramer_sets = np.concatenate((re_column, allDesigns), axis=1)
+            parameter_sets = np.concatenate((re_column, designs), axis=1)
 
-            print(paramer_sets)
+            
+            upstreamResults = self.inferencer.infer(parameter_sets=parameter_sets, output_pos=upstreamPoints)
+            downstreamResults = self.inferencer.infer(parameter_sets=parameter_sets, output_pos=downstreamPoints)
 
-            upstreamResults = self.inferencer.infer(parameter_sets=designs, output_pos=upstreamPoints)
-            downstreamResults = self.inferencer.infer(parameter_sets=designs, output_pos=downstreamPoints)
+            usp = upstreamResults['prediction'][2]
+            
+            print('infered values')
 
-            valuesF.append(2*(upstreamResults[2]-downstreamResults[2])/(rho*Um**2))
+            valuesF.append(2*(upstreamResults['prediction'][2]-downstreamResults[2])/(rho*Um**2))
 
 
         out["F"] = np.array(valuesF)
