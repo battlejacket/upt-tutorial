@@ -113,6 +113,17 @@ class ffsDataset(Dataset):
         re = (re * 260) + 550
         return re
 
+    def subsample(self, nrPoints, mesh_pos, features=None, seed=None):        
+        if seed is None:
+                rng = None
+        else:
+            rng = torch.Generator().manual_seed(seed)
+        perm = torch.randperm(len(mesh_pos), generator=rng)[:nrPoints]
+        if features is not None:
+            return mesh_pos[perm], features[perm]
+        else:
+            return mesh_pos[perm]
+
     def __getitem__(self, idx):
         # load mesh points and targets (u, v, p)
         mesh_pos = torch.load(self.uris[idx] / "mesh_points.th", weights_only=True)
@@ -141,15 +152,13 @@ class ffsDataset(Dataset):
         sdf = self.normalize_sdf(sdf)
 
         # subsample random input pixels (locations of inputs and outputs does not have to be the same)
-        if self.num_inputs != float("inf"):
+        if self.num_inputs != float("inf"):            
             if self.mode == "train":
-                rng = None
+                    seed = None
             else:
-                rng = torch.Generator().manual_seed(idx)
-            
-            input_perm = torch.randperm(len(mesh_pos), generator=rng)[:self.num_inputs]
-            input_feat = sdf[input_perm]
-            input_pos = mesh_pos[input_perm] #.clone()
+                seed = idx
+            input_pos, input_feat = self.subsample(nrPoints=self.num_inputs, mesh_pos=mesh_pos, features=sdf, seed=seed)
+
         else:
             input_feat = sdf
             input_pos = mesh_pos #.clone()
@@ -157,12 +166,10 @@ class ffsDataset(Dataset):
         # subsample random output pixels (locations of inputs and outputs does not have to be the same)
         if self.num_outputs != float("inf"):
             if self.mode == "train":
-                rng = None
+                seed = None
             else:
-                rng = torch.Generator().manual_seed(idx + 1)
-            output_perm = torch.randperm(len(target), generator=rng)[:self.num_outputs]
-            target_feat = target[output_perm]
-            output_pos = mesh_pos[output_perm] #.clone()
+                seed = idx +1
+            output_pos, target_feat = self.subsample(nrPoints=self.num_outputs, mesh_pos=mesh_pos, features=target, seed=seed)
         else:
             target_feat = target
             output_pos = mesh_pos #.clone()

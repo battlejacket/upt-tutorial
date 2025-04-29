@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import pygmsh
 from data.ffs.readParameters import readParametersFromFileName
+import time  # Add this import at the top of the file
 
 
 class ffsInference:
@@ -24,6 +25,12 @@ class ffsInference:
             self.xMax = train_dataset.crop_values[1][0]
         else: 
             self.xMax = xMax
+        self.obstacleMesh = None
+        self.baseMesh = None
+
+
+
+
 
     def ffsGeo(self, Lo, Ho):
         xMax = 12
@@ -101,26 +108,7 @@ class ffsInference:
 
         return points, sdf
     
-    def modify_base_mesh(self, Lo, Ho):
-        """
-        Generate a mesh-based point cloud by updating a mesh from training data and compute the signed distance function (SDF).
-        """
-        geo = self.ffsGeo(Lo=Lo, Ho=Ho)
-
-        # Load mesh without obstacle
-        baseMesh = torch.load('./data/ffs/baseMesh/mesh_points.th', weights_only=True)
-        # Load mesh with large obstacle
-        name = 'DP600_906,25000000000648_0,55666666666666553_0,49966666666666859'
-        obstacleMesh = torch.load(f'./data/ffs/preprocessed600/{name}/mesh_points.th', weights_only=True)
-        parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
-        parametersBase = readParametersFromFileName(name, parameterDef)
-        LoObs = parametersBase['Lo']
-        HoObs = parametersBase['Ho']
-
-        # Move obstacleMesh to correct location CHECK
-        obstacleMesh[:, 0] += LoObs - Lo
-        obstacleMesh[:, 1] += HoObs - Ho 
-
+    def getMaskPolygon(self, Lo, Ho):
         # Create points for masking
         Wo = 0.1
         thichness = 0.05 
@@ -131,53 +119,104 @@ class ffsInference:
         dsx = -Lo + Wo + thichness
         yl = yu - Ho - thichness
 
-        # bPoints = [
-        #     [usx, y45], [-Lo, yu], [-Lo, yu - Ho],
-        #     [-Lo + Wo, yu - Ho], [-Lo + Wo, yu], [dsx, y45],
-        #     [dsx, yl], [usx, yl]
-        # ]
-
         bPoints = [
             [usx, y45], [-Lo, yu], 
             [-Lo + Wo, yu], [dsx, y45],
             [dsx, yl], [usx, yl]
         ]
 
-        # Define the polygon for masking
+        # Define polygon for masking
         mask_polygon = Polygon(bPoints)
+        return mask_polygon, usx, dsx, yl
+    
+         
+    def setBaseMesh(self):
+        startTime = time.time()
+        baseMesh = torch.load('./data/ffs/baseMesh/mesh_points.th', weights_only=True)
+        # Load mesh with large obstacle
+        name = 'DP600_906,25000000000648_0,55666666666666553_0,49966666666666859'
+        obstacleMesh = torch.load(f'./data/ffs/preprocessed600/{name}/mesh_points.th', weights_only=True)
+        parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
+        parametersObs = readParametersFromFileName(name, parameterDef)
+        self.LoObs = parametersObs['Lo']
+        self.HoObs = parametersObs['Ho']
+        endTime = time.time()
+        print(f"Loading mesh took {endTime - startTime:.4f} seconds.")
 
-        # Filter points based on xMin and xMax
-        baseMesh = baseMesh[(baseMesh[:, 0] >= self.xMin) & (baseMesh[:, 0] <= self.xMax)]
-        obstacleMesh = obstacleMesh[(obstacleMesh[:, 0] >= self.xMin) & (obstacleMesh[:, 0] <= self.xMax)]
-        obstacleMesh = obstacleMesh[obstacleMesh[:, 1] <= 0.5]
+        startTime = time.time()
+        mask_polygon, usx, dsx, y1 = self.getMaskPolygon(self.LoObs, self.HoObs)
 
-        # Convert baseMesh and obstacleMesh to numpy for easier manipulation
+
         baseMesh_np = baseMesh.numpy()
         obstacleMesh_np = obstacleMesh.numpy()
+        endTime = time.time()
+        print(f"Numpy conv. took {endTime - startTime:.4f} seconds.")
 
-        # Identify points in baseMesh that are outside the mask_polygon
-        base_points = [Point(p) for p in baseMesh_np]
-        base_outside_mask = np.array([not mask_polygon.contains(pt) for pt in base_points])
-
+        startTime = time.time()
         # Identify points in obstacleMesh that are inside the mask_polygon
         obstacle_points = [Point(p) for p in obstacleMesh_np]
         obstacle_inside_mask = np.array([mask_polygon.contains(pt) for pt in obstacle_points])
 
+        
+
+        self.obstacleMesh = obstacleMesh_np[obstacle_inside_mask]
+        self.baseMesh = baseMesh_np[(baseMesh_np[:, 0] >= self.xMin) & (baseMesh_np[:, 0] <= self.xMax)]
+
+        print('base mesh set')
+
+    def modify_base_mesh(self, Lo, Ho):
+        """
+        Generate a mesh-based point cloud by updating a mesh from training data and compute the signed distance function (SDF).
+        """
+        geo = self.ffsGeo(Lo=Lo, Ho=Ho)
+
+        if self.baseMesh is None:
+            self.setBaseMesh()
+
+        mask_polygon, usx, dsx, yl  = self.getMaskPolygon(Lo, Ho)
+
+        # Move obstacleMesh to correct location
+        obstacleMesh = self.obstacleMesh.copy()
+        obstacleMesh[:, 0] += self.LoObs - Lo
+        obstacleMesh[:, 1] += self.HoObs - Ho
+        obstacleMesh = obstacleMesh[(obstacleMesh[:, 0] >= self.xMin) & (obstacleMesh[:, 0] <= self.xMax)]
+        obstacleMesh = obstacleMesh[obstacleMesh[:, 1] <= 0.5]
+
+        
+
+        baseMesh = self.baseMesh.copy()
+        maskClose = ((baseMesh[:, 0] >= usx) & (baseMesh[:, 0] <= dsx) & (baseMesh[:, 1] >= yl))
+        baseMeshClose = baseMesh[maskClose]
+        baseMesh = baseMesh[~maskClose]
+
+        # startTime = time.time()
+        # Identify points in baseMesh that are outside the mask_polygon
+        base_points = [Point(p) for p in baseMeshClose]
+        base_outside_mask = np.array([not mask_polygon.contains(pt) for pt in base_points])
         # Keep only points outside the mask in baseMesh
-        baseMesh_filtered = baseMesh_np[base_outside_mask]
+        baseMesh_filtered = baseMeshClose[base_outside_mask]
+        # endTime = time.time()
+        # print(f"Creating base mask and contins took {endTime - startTime:.4f} seconds.")
 
-        # Add points inside the mask from obstacleMesh
-        obstacleMesh_filtered = obstacleMesh_np[obstacle_inside_mask]
-        updatedMesh_np = np.vstack((baseMesh_filtered, obstacleMesh_filtered))
+        updatedMesh_np = np.vstack((baseMesh, baseMesh_filtered, obstacleMesh))
+        # updatedMesh_np = np.vstack((baseMesh_filtered, obstacleMesh))
+        # updatedMesh_np = baseMesh_filtered
 
+        updatedMesh_np = self.train_dataset.subsample(nrPoints=self.totalPoints, mesh_pos=updatedMesh_np, seed=0)
+        
+        # startTime = time.time()
         # Compute SDF for the updated mesh
-        # points = updatedMesh.numpy()
-        # points = points[(points[:, 0] >= self.xMin) & (points[:, 0] <= self.xMax)]
         sdf = np.array([self.signed_distance(p, geo) for p in updatedMesh_np])
+        # endTime = time.time()
+        # print(f"Sdf calc took {endTime - startTime:.4f} seconds.")
+
+
 
         return updatedMesh_np, sdf
 
     def preprocess(self, re_value, Lo, Ho, idx):
+        torch.manual_seed(0)  # Set a fixed seed
+        np.random.seed(0)     # Set a fixed seed for numpy
         """
         Preprocess the input data by generating the point cloud and normalizing features.
         """
@@ -221,19 +260,34 @@ class ffsInference:
     def infer(self, parameter_sets, output_pos=None):
         """
         Perform inference for a set of parameters using the model.
+        Collect predictions together for easier analysis.
         """
         if self.model is None or self.device is None:
             raise ValueError("Model and device must be assigned before calling infer.")
-        if self.useMesh=='gmsh' and self.meshParameters is None:
+        if self.useMesh == 'gmsh' and self.meshParameters is None:
             raise ValueError("Mesh parameters must be provided when useMesh is gmsh.")
-        
-        results = []
-        idx = 0
-        for re_value, Lo, Ho in parameter_sets:
-            batch = self.preprocess(re_value, Lo, Ho, idx)
 
+        all_predictions = []
+        all_parameters = []
+        all_points = []
+
+        idx = 0
+        total_start_time = time.time()  # Start timing the entire inference process
+
+        for re_value, Lo, Ho in parameter_sets:
+            step_start_time = time.time()  # Start timing this step
+
+            # Preprocessing step
+            preprocess_start_time = time.time()
+            batch = self.preprocess(re_value, Lo, Ho, idx)
+            preprocess_end_time = time.time()
+            # print(f"Preprocessing for parameters (re={re_value}, Lo={Lo}, Ho={Ho}) took {preprocess_end_time - preprocess_start_time:.4f} seconds.")
+
+            # Output position setup
             current_output_pos = output_pos if output_pos is not None else batch['output_pos']
-            print(re_value, Lo, Ho)
+
+            # Inference step
+            inference_start_time = time.time()
             with torch.no_grad():
                 y_hat = self.model(
                     input_feat=batch['input_feat'].to(self.device),
@@ -243,14 +297,32 @@ class ffsInference:
                     output_pos=current_output_pos.to(self.device),
                     re=batch['re'].to(self.device),
                 )
-                result = dict(
-                    parameters={'re': re_value, 'Lo': Lo, 'Ho': Ho},
-                    points=self.train_dataset.denormalize_pos(current_output_pos.squeeze()),
-                    prediction=self.train_dataset.denormalize_feat(y_hat.cpu())
-                )
-                results.append(result)
-                idx += 1
-        return results
+            inference_end_time = time.time()
+            # print(f"Inference for parameters (re={re_value}, Lo={Lo}, Ho={Ho}) took {inference_end_time - inference_start_time:.4f} seconds.")
+
+            # Postprocessing step
+            postprocess_start_time = time.time()
+            all_points.append(self.train_dataset.denormalize_pos(current_output_pos.squeeze()))
+            all_predictions.append(self.train_dataset.denormalize_feat(y_hat.cpu()))
+            all_parameters.append({'re': re_value, 'Lo': Lo, 'Ho': Ho})
+            postprocess_end_time = time.time()
+            # print(f"Postprocessing for parameters (re={re_value}, Lo={Lo}, Ho={Ho}) took {postprocess_end_time - postprocess_start_time:.4f} seconds.")
+
+            # Step timing
+            step_end_time = time.time()
+            # print(f"Total time for step {idx + 1} (re={re_value}, Lo={Lo}, Ho={Ho}) took {step_end_time - step_start_time:.4f} seconds.")
+
+            idx += 1
+
+        total_end_time = time.time()  # End timing the entire inference process
+        # print(f"Total inference process took {total_end_time - total_start_time:.4f} seconds.")
+
+        return {
+            'parameters': all_parameters,
+            'points': torch.stack(all_points),
+            'predictions': torch.stack(all_predictions)
+        }
+
 
     def get_batches(self, parameter_sets):
         """

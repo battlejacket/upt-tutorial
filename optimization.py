@@ -18,66 +18,61 @@ from ffsInference import ffsInference
 
 class ffsOptProblem(Problem):
 
-    def __init__(self, n_var, n_obj, xl, xu, re, inferencer: ffsInference, maxDesignsPerEvaluation=100):
+    def __init__(self, n_var, n_obj, xl, xu, inferencer: ffsInference, re=500.0, maxDesignsPerEvaluation=100):
         super().__init__(n_var=n_var, n_obj=n_obj, xl=xl, xu=xu)
         self.gen = 0
         self.re = re
         self.maxDesignsPerEvaluation = maxDesignsPerEvaluation
         self.inferencer = inferencer
 
-    # def readFile(self, fileDir, objective, design):
-    #     file = objective + "_design_" + str(design[0]) + ".csv"
-    #     with open(os.path.join(fileDir, file), "r") as datafile:
-    #         data = []
-    #         reader = csv.reader(datafile, delimiter=",")
-    #         for row in reader:
-    #             columns = [row[1]]
-    #             data.append(columns)
-    #         last_row = float(data[-1][0])
-    #         return np.array(last_row)
-
     def _evaluate(self, allDesigns, out, *args, **kwargs):
         start_time = time.time()
-        if self.maxDesignsPerEvaluation > allDesigns.shape[0]:
-            batches = 1
-        else:
-            batches = int(allDesigns.shape[0]/self.maxDesignsPerEvaluation)
-
-        valuesF = []
-        print(f'Generation {str(self.gen)}: Evaluating {str(allDesigns.shape[0])} Designs in {str(batches)} Batches')
+        # valuesF = []
+        # print(f'Generation {str(self.gen)}: Evaluating {str(allDesigns.shape[0])} Designs in {str(batches)} Batches')
         # print("Generation " + str(self.gen) + ": Evaluating " + str(allDesigns.shape[0]) + " Designs in " + str(batches) + " Batches")
         
         # Create points to use for inference, one line upsteam and one line downstream of the step
         upstreamX = -3
         downstreamX = 3
-        numPoints = 100
-        upstreamPoints = torch.tensor([[y, upstreamX] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32).unsqueeze(0)
-        downstreamPoints = torch.tensor([[y, downstreamX] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32).unsqueeze(0)
+        numPoints = 5
+        upstreamPoints = torch.tensor([[upstreamX, y] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32)
+        downstreamPoints = torch.tensor([[downstreamX, y] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32)
+        points = torch.cat((upstreamPoints, downstreamPoints), dim=0).unsqueeze(0)
+
+        points = self.inferencer.train_dataset.normalize_pos(points)
 
         # fluidParameters
         rho = 1.0
         Um = 1.0
 
-        for designs in np.array_split(ary=allDesigns, indices_or_sections=batches):
+        # for designs in np.array_split(ary=allDesigns, indices_or_sections=batches):
+        designs = allDesigns
             # Inference
             # Create a column of c values with the same number of rows as a
-            re_column = np.full((designs.shape[0], 1), self.re)
+        re_column = np.full((designs.shape[0], 1), self.re)
 
-            # Concatenate along the second axis (columns)
-            parameter_sets = np.concatenate((re_column, designs), axis=1)
+        # Concatenate along the second axis (columns)
+        parameter_sets = np.concatenate((re_column, designs), axis=1)
 
-            
-            upstreamResults = self.inferencer.infer(parameter_sets=parameter_sets, output_pos=upstreamPoints)
-            downstreamResults = self.inferencer.infer(parameter_sets=parameter_sets, output_pos=downstreamPoints)
+        # print("Parameter sets shape: ", parameter_sets.shape)
+        # print("Parameter sets: ", parameter_sets)
+        
+        results = self.inferencer.infer(parameter_sets=parameter_sets, output_pos=points)
+        prediction = results['predictions']
+        upstreamPressures = prediction[:, :, 2][:,:numPoints]
+        downstreamPressures = prediction[:, :, 2][:,numPoints:]
 
-            usp = upstreamResults['prediction'][2]
-            
-            print('infered values')
+        upstreamPressure = upstreamPressures.mean(dim=1)
+        downstreamPressure = downstreamPressures.mean(dim=1)
+        
+        dCp =  2*(upstreamPressure-downstreamPressure)/(rho*Um**2)
 
-            valuesF.append(2*(upstreamResults['prediction'][2]-downstreamResults[2])/(rho*Um**2))
+        # print("dCp shape: ", dCp.shape)
+        # print("dCp: ", dCp)
 
+        # valuesF.append(dCp.detach().cpu().numpy())
 
-        out["F"] = np.array(valuesF)
+        out["F"] = dCp.detach().cpu().numpy() #np.array(valuesF)
         self.gen += 1
         elapsed_time = time.time() - start_time
         print("Evaluation time: ", elapsed_time)
