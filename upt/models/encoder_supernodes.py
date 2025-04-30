@@ -3,7 +3,6 @@ from functools import partial
 from kappamodules.layers import LinearProjection, Sequential
 from kappamodules.transformer import PerceiverPoolingBlock, PrenormBlock, DitPerceiverPoolingBlock, DitBlock
 from upt.modules.supernode_pooling import SupernodePooling
-from upt.modules.supernode_pooling_no_feat import SupernodePoolingNoFeat
 from torch import nn
 
 
@@ -40,7 +39,7 @@ class EncoderSupernodes(nn.Module):
         self.init_weights = init_weights
 
         # supernode pooling
-        self.supernode_pooling = SupernodePoolingNoFeat(
+        self.supernode_pooling = SupernodePooling(
             radius=radius,
             max_degree=max_degree,
             input_dim=input_dim,

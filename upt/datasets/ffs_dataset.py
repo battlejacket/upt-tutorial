@@ -18,7 +18,7 @@ class ffsDataset(Dataset):
             # train or test
             mode,
             crop_values = None,
-            # crop_values = [[x_min, y_min], [x_max, y_max]],
+            inferencer=None            # crop_values = [[x_min, y_min], [x_max, y_max]],
     ):
         super().__init__()
         root = Path(root).expanduser()
@@ -27,6 +27,7 @@ class ffsDataset(Dataset):
         self.num_outputs = num_outputs
         self.mode = mode
         self.crop_values = crop_values
+        self.inferencer = inferencer
 
         # define spatial min/max of simulation (for normalizing to [0, 1] and then scaling to [0, 200] for pos_embed)
         if self.crop_values is None:
@@ -123,6 +124,8 @@ class ffsDataset(Dataset):
             return mesh_pos[perm], features[perm]
         else:
             return mesh_pos[perm]
+        
+    
 
     def __getitem__(self, idx):
         # load mesh points and targets (u, v, p)
@@ -133,10 +136,9 @@ class ffsDataset(Dataset):
         target = torch.cat((u, v, p), dim=1)
         parameters = readParametersFromFileName(self.uris[idx].name, self.parameterDef)
         re = parameters['re']
+        Lo = parameters['Lo']
+        Ho = parameters['Ho']
         sdf = torch.load(self.uris[idx] / "mesh_sdf.th", weights_only=True).unsqueeze(1).float()
-        # sdf = torch.ones_like(sdf)
-        # sdf = torch.zeros_like(sdf)
-        
         if self.crop_values is not None:
             # Filter mesh_pos, input_feat and target based on self.domain_min and self.domain_max
             mask = (mesh_pos[:, 0] >= self.domain_min[0]) & (mesh_pos[:, 0] <= self.domain_max[0]) & \
@@ -145,11 +147,23 @@ class ffsDataset(Dataset):
             target = target[mask]
             sdf = sdf[mask]
 
+        if self.inference:
+            input = self.inferencer.preprocess(re_value=re, Lo=Lo, Ho=Ho)
+
+            # returns
+            # {'input_feat': input_feat.unsqueeze(1), use 
+            # 'input_pos': input_pos, use
+            # 'supernode_idxs': supernode_idxs, thrown away
+            # 'batch_idx': batch_idx, thrown away
+            # 'output_pos': input_pos.unsqueeze(0), thrown away
+            # 're': re} thrown away or not
+
         # normalize
         mesh_pos = self.normalize_pos(mesh_pos)
         target = self.normalize_feat(target)
         re = self.normalize_re(re)
         sdf = self.normalize_sdf(sdf)
+
 
         # subsample random input pixels (locations of inputs and outputs does not have to be the same)
         if self.num_inputs != float("inf"):            
@@ -174,6 +188,11 @@ class ffsDataset(Dataset):
             target_feat = target
             output_pos = mesh_pos #.clone()
         
+        if self.inference:
+            input = self.inferencer.preprocess(re)
+            'input_feat' = input['input_feat'].squeeze(),
+            'input_pos'= input['input:pos'],
+
         return dict(
             index=idx,
             input_feat=input_feat,

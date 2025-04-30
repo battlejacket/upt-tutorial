@@ -214,7 +214,7 @@ class ffsInference:
 
         return updatedMesh_np, sdf
 
-    def preprocess(self, re_value, Lo, Ho, idx):
+    def preprocess(self, re_value, Lo, Ho):
         torch.manual_seed(0)  # Set a fixed seed
         np.random.seed(0)     # Set a fixed seed for numpy
         """
