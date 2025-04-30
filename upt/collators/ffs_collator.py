@@ -54,7 +54,9 @@ class ffsCollator:
 
         # target_feat to sparse tensor
         # batch_size * (num_outputs, dim) -> (batch_size * num_outputs, dim)
-        collated_batch["target_feat"] = torch.concat([batch[i]["target_feat"] for i in range(len(batch))])
+        if batch[i]['target_feat'] is not None:
+            collated_batch["target_feat"] = torch.concat([batch[i]["target_feat"] for i in range(len(batch))])
+        
         collated_batch["re"] = default_collate([batch[i]["re"] for i in range(len(batch))])
         collated_batch["name"]= default_collate([batch[i]["name"] for i in range(len(batch))])
 

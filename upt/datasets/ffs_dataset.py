@@ -4,7 +4,10 @@ import torch
 from torch.utils.data import Dataset
 from data.ffs.readParameters import readParametersFromFileName
 import pygmsh
-
+from shapely.geometry import Point, LineString, Polygon
+import numpy as np
+import time  # Add this import at the top of the file
+from torch.utils.data import DataLoader
 
 class ffsDataset(Dataset):
     def __init__(
@@ -16,6 +19,8 @@ class ffsDataset(Dataset):
             crop_values=None,
             parameter_sets=None,
             use_inferencer_inputs=False,  # New flag to use inputs from the inferencer
+            useMesh=None,
+            meshParameters=None
     ):
         super().__init__()
         self.root = Path(root).expanduser()
@@ -25,6 +30,10 @@ class ffsDataset(Dataset):
         self.crop_values = crop_values
         self.parameter_sets = parameter_sets
         self.use_inferencer_inputs = use_inferencer_inputs
+        self.useMesh = useMesh
+        self.meshParameters = meshParameters
+        self.obstacleMesh = None
+        self.baseMesh = None
 
         # Define spatial min/max of simulation
         if self.crop_values is None:
@@ -36,58 +45,274 @@ class ffsDataset(Dataset):
             self.domain_max = torch.tensor(self.crop_values[1]).squeeze(0)
         self.scale = 200
 
+        self.xMin = self.domain_min[0].numpy()
+        self.xMax = self.domain_max[0].numpy()
+        
+
+
         # Mean/std for normalization
         normVars = torch.load(self.root / 'vars_norm.th', weights_only=True)
         self.mean = normVars['mean']
         self.std = normVars['std']
 
         self.uris = []
+        # self.TEST_INDICES = []
         self.parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
-
-        # Load dataset URIs
+            
+        self.TEST_INDICES = [445, 383, 382, 521, 163, 403, 143, 344, 487, 375, 338, 432, 472,  53,
+        451, 510,  78, 280,  62, 552,  50, 207, 282, 532, 291,  76, 332, 257,
+        489, 471,  38, 481, 151, 543, 401, 318, 167, 346,  92, 269,  85, 349,
+        587,  77,  55, 465, 562, 442, 161, 503, 364, 144, 412, 210, 231, 513,
+        295, 566, 217, 505, 406,  46, 501, 104, 365, 233,   0, 522,  11, 112,
+        28, 461, 308,  40, 572, 573, 565, 476, 293, 334, 111, 102, 398, 497,
+        91, 485, 317, 379, 370, 421, 260, 596, 141, 351, 423, 137,   9, 395,
+        578, 292, 553, 429, 147,  49, 544, 561, 214, 400, 183, 186, 343, 244,
+        281, 170, 277,  12, 134, 139, 106, 366]
+        
         for name in sorted(os.listdir(self.root)):
             sampleDir = self.root / name
             if sampleDir.is_dir():
                 self.uris.append(sampleDir)
-
-        # Handle inference mode
-        if self.mode == 'inference' and self.parameter_sets is not None:
+                # dp = sampleDir.name.split('_')[0].replace('DP', '')
+                # if int(dp) > 100:
+                #     self.TEST_INDICES.append(len(self.uris)-1)
+        
+        # split into train/test uris
+        if self.mode == "train":
+            train_idxs = [i for i in range(len(self.uris)) if i not in self.TEST_INDICES]
+            self.uris = [self.uris[train_idx] for train_idx in train_idxs]
+            self.num_values = len(self.uris)
+        elif self.mode == "test":
+            self.uris = [self.uris[test_idx] for test_idx in self.TEST_INDICES]
+            self.num_values = len(self.uris)
+        elif self.mode == 'inference' and self.parameter_sets is not None:
             self.uris = None  # No URIs needed for parameter sets
             self.num_values = len(self.parameter_sets)
         else:
-            self.num_values = len(self.uris)
+            raise NotImplementedError
+        
 
     def __len__(self):
         return self.num_values
 
-    def preprocess(self, re_value, Lo, Ho):
-        """
-        Preprocess data for inference.
-        """
-        # Generate input points and features
-        input_pos, input_feat = self.generate_input_points(Lo, Ho)
-        re = self.normalize_re(torch.tensor([re_value], dtype=torch.float32))
+    def ffsGeo(self, Lo, Ho):
+            xMax = 12
+            xMin = -6
+            Wo = 0.1
+            
+            bPoints = [
+                Point(xMin, 0.5), Point(-Lo, 0.5), Point(-Lo, 0.5 - Ho),
+                Point(-Lo + Wo, 0.5 - Ho), Point(-Lo + Wo, 0.5), Point(0, 0.5),
+                Point(0, 0), Point(xMax, 0), Point(xMax, -0.5), Point(xMin, -0.5),
+                Point(xMin, 0.5)
+            ]
+            boundary = LineString(bPoints)
+            geo = Polygon(bPoints)
 
-        # Generate output points (optional for inference)
-        output_pos = input_pos.clone()  # Example: use the same points for output
+            return {'boundary': boundary, 'boundaryPoints': bPoints, 'geo': geo}
+
+    def signed_distance(self, p, shape):
+        pt = Point(p)
+        d = pt.distance(shape['boundary'])
+        return d if shape['geo'].contains(pt) else -d
+
+    def generate_grid_points(self, Lo, Ho):
+        """
+        Generate a grid-based point cloud and compute the signed distance function (SDF).
+        """
+        if self.num_inputs == float("inf"):
+            num_points = 10000
+        else:
+            num_points = self.num_inputs  
+        aspect = (self.xMax - self.xMin) / 1
+        Ny = int(np.sqrt(num_points / aspect))
+        Nx = int(num_points / Ny)
+
+        x = np.linspace(self.xMin, self.xMax, Nx)
+        y = np.linspace(-0.5, 0.5, Ny)
+        X, Y = np.meshgrid(x, y)
+        points = np.stack([X.ravel(), Y.ravel()], axis=1)
+
+        geo = self.ffsGeo(Lo=Lo, Ho=Ho)
+        sdf = np.array([self.signed_distance(p, geo) for p in points])
+
+        mask = (sdf >= 0)
+        insidePoints = points[mask]
+        insideSdf = sdf[mask]
+
+        return insidePoints, insideSdf
+
+    def generate_mesh_points(self, Lo, Ho):
+        """
+        Generate a mesh-based point cloud using pygmsh and compute the signed distance function (SDF).
+        """
+        
+        
+        geo = self.ffsGeo(Lo=Lo, Ho=Ho)
+        # Convert to list of [x, y]
+        bPoints = [list(p.coords)[0] for p in geo['boundaryPoints']]
+
+        with pygmsh.geo.Geometry() as geom:
+            poly = geom.add_polygon(
+                bPoints[:-1], 
+                mesh_size=self.meshParameters['size'],
+            )
+
+            field0 = geom.add_boundary_layer(
+                edges_list=poly.curves,
+                lcmin=self.meshParameters['lcmin'],  # Min cell size
+                lcmax=self.meshParameters['lcmax'],  # Max cell size
+                distmin=self.meshParameters['distmin'],  # Min distance
+                distmax=self.meshParameters['distmax'],  # Max distance  
+            )
+
+            geom.set_background_mesh([field0], operator="Min")
+            mesh = geom.generate_mesh()
+            points = mesh.points[:, :2]  # Get only x and y coordinates
+        
+        points = points[(points[:, 0] >= self.xMin) & (points[:, 0] <= self.xMax)]
+        sdf = np.array([self.signed_distance(p, geo) for p in points])
+
+        return points, sdf
+    
+    def getMaskPolygon(self, Lo, Ho):
+        # Create points for masking
+        Wo = 0.1
+        thichness = 0.05 
+        margin = 0.01
+        yu = 0.5 + margin
+        y45 = yu - thichness
+        usx = -Lo - thichness
+        dsx = -Lo + Wo + thichness
+        yl = yu - Ho - thichness
+
+        bPoints = [
+            [usx, y45], [-Lo, yu], 
+            [-Lo + Wo, yu], [dsx, y45],
+            [dsx, yl], [usx, yl]
+        ]
+
+        # Define polygon for masking
+        mask_polygon = Polygon(bPoints)
+        return mask_polygon, usx, dsx, yl
+    
+        
+    def setBaseMesh(self):
+        startTime = time.time()
+        baseMesh = torch.load('./data/ffs/baseMesh/mesh_points.th', weights_only=True)
+        # Load mesh with large obstacle
+        name = 'DP600_906,25000000000648_0,55666666666666553_0,49966666666666859'
+        obstacleMesh = torch.load(f'./data/ffs/preprocessed600/{name}/mesh_points.th', weights_only=True)
+        parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
+        parametersObs = readParametersFromFileName(name, parameterDef)
+        self.LoObs = parametersObs['Lo']
+        self.HoObs = parametersObs['Ho']
+        endTime = time.time()
+        print(f"Loading mesh took {endTime - startTime:.4f} seconds.")
+
+        startTime = time.time()
+        mask_polygon, usx, dsx, y1 = self.getMaskPolygon(self.LoObs, self.HoObs)
+
+
+        baseMesh_np = baseMesh.numpy()
+        obstacleMesh_np = obstacleMesh.numpy()
+        endTime = time.time()
+        print(f"Numpy conv. took {endTime - startTime:.4f} seconds.")
+
+        startTime = time.time()
+        # Identify points in obstacleMesh that are inside the mask_polygon
+        obstacle_points = [Point(p) for p in obstacleMesh_np]
+        obstacle_inside_mask = np.array([mask_polygon.contains(pt) for pt in obstacle_points])
+
+        
+
+        self.obstacleMesh = obstacleMesh_np[obstacle_inside_mask]
+        self.baseMesh = baseMesh_np[(baseMesh_np[:, 0] >= self.xMin) & (baseMesh_np[:, 0] <= self.xMax)]
+
+        print('base mesh set')
+
+    def modify_base_mesh(self, Lo, Ho):
+        """
+        Generate a mesh-based point cloud by updating a mesh from training data and compute the signed distance function (SDF).
+        """
+        geo = self.ffsGeo(Lo=Lo, Ho=Ho)
+
+        if self.baseMesh is None:
+            self.setBaseMesh()
+
+        mask_polygon, usx, dsx, yl  = self.getMaskPolygon(Lo, Ho)
+
+        # Move obstacleMesh to correct location
+        obstacleMesh = self.obstacleMesh.copy()
+        obstacleMesh[:, 0] += self.LoObs - Lo
+        obstacleMesh[:, 1] += self.HoObs - Ho
+        obstacleMesh = obstacleMesh[(obstacleMesh[:, 0] >= self.xMin) & (obstacleMesh[:, 0] <= self.xMax)]
+        obstacleMesh = obstacleMesh[obstacleMesh[:, 1] <= 0.5]
+
+        
+
+        baseMesh = self.baseMesh.copy()
+        maskClose = ((baseMesh[:, 0] >= usx) & (baseMesh[:, 0] <= dsx) & (baseMesh[:, 1] >= yl))
+        baseMeshClose = baseMesh[maskClose]
+        baseMesh = baseMesh[~maskClose]
+
+        # startTime = time.time()
+        # Identify points in baseMesh that are outside the mask_polygon
+        base_points = [Point(p) for p in baseMeshClose]
+        base_outside_mask = np.array([not mask_polygon.contains(pt) for pt in base_points])
+        # Keep only points outside the mask in baseMesh
+        baseMesh_filtered = baseMeshClose[base_outside_mask]
+        # endTime = time.time()
+        # print(f"Creating base mask and contins took {endTime - startTime:.4f} seconds.")
+
+        updatedMesh_np = np.vstack((baseMesh, baseMesh_filtered, obstacleMesh))
+        # updatedMesh_np = np.vstack((baseMesh_filtered, obstacleMesh))
+        # updatedMesh_np = baseMesh_filtered
+
+        if self.num_outputs != float("inf"):
+            updatedMesh_np = self.subsample(nrPoints=self.num_inputs, mesh_pos=updatedMesh_np, seed=0)
+        # startTime = time.time()
+        # Compute SDF for the updated mesh
+        sdf = np.array([self.signed_distance(p, geo) for p in updatedMesh_np])
+        # endTime = time.time()
+        # print(f"Sdf calc took {endTime - startTime:.4f} seconds.")
+
+
+
+        return updatedMesh_np, sdf
+
+    def preprocess(self, re_value, Lo, Ho):
+        torch.manual_seed(0)  # Set a fixed seed
+        np.random.seed(0)     # Set a fixed seed for numpy
+        """
+        Preprocess the input data by generating the point cloud and normalizing features.
+        """
+        if self.useMesh=='gmsh' and self.meshParameters is not None:
+            points, sdf = self.generate_mesh_points(
+                Lo=Lo,
+                Ho=Ho,
+            )
+        elif self.useMesh=='modify':
+            points, sdf = self.modify_base_mesh(
+                Lo=Lo,
+                Ho=Ho
+            )
+        else:
+            points, sdf = self.generate_grid_points(
+                Lo=Lo,
+                Ho=Ho
+            )
+
+        input_feat = self.normalize_sdf(torch.tensor(sdf, dtype=torch.float32)).unsqueeze(1)
+        input_pos = self.normalize_pos(torch.tensor(points, dtype=torch.float32))
+        re = self.normalize_re(torch.tensor([re_value], dtype=torch.float32)).squeeze(0)
+
         return {
             'input_feat': input_feat,
             'input_pos': input_pos,
-            'output_pos': output_pos,
+            'output_pos': input_pos,
             're': re
         }
-
-    def generate_input_points(self, Lo, Ho):
-        """
-        Generate input points and features based on Lo and Ho.
-        """
-        # Example implementation (can be grid-based or mesh-based)
-        x = torch.linspace(self.domain_min[0], self.domain_max[0], self.num_inputs)
-        y = torch.linspace(self.domain_min[1], self.domain_max[1], self.num_inputs)
-        X, Y = torch.meshgrid(x, y)
-        input_pos = torch.stack([X.flatten(), Y.flatten()], dim=1)
-        input_feat = torch.zeros(input_pos.shape[0], 1)  # Example: placeholder features
-        return input_pos, input_feat
 
     def normalize_pos(self, pos):
         pos = pos.sub(self.domain_min).div(self.domain_max - self.domain_min).mul(self.scale)
@@ -138,11 +363,12 @@ class ffsDataset(Dataset):
         if self.mode == "inference":
             # Handle inference mode with parameter sets
             re_value, Lo, Ho = self.parameter_sets[idx]
-            input_data = self.inferencer.preprocess(re_value, Lo, Ho)
+            input_data = self.preprocess(re_value, Lo, Ho)
             return dict(
-                input_feat=input_data['input_feat'].squeeze(),
+                index=idx,
+                input_feat=input_data['input_feat'],
                 input_pos=input_data['input_pos'],
-                target_feat=None,  # No target in inference mode
+                target_feat=None,
                 output_pos=input_data['output_pos'],
                 re=input_data['re'],
                 name=f"param_set_{idx}"
@@ -159,6 +385,14 @@ class ffsDataset(Dataset):
         Lo = parameters['Lo']
         Ho = parameters['Ho']
         sdf = torch.load(self.uris[idx] / "mesh_sdf.th", weights_only=True).unsqueeze(1).float()
+       
+        if self.crop_values is not None:
+            # Filter mesh_pos, input_feat and target based on self.domain_min and self.domain_max
+            mask = (mesh_pos[:, 0] >= self.domain_min[0]) & (mesh_pos[:, 0] <= self.domain_max[0]) & \
+                (mesh_pos[:, 1] >= self.domain_min[1]) & (mesh_pos[:, 1] <= self.domain_max[1])
+            mesh_pos = mesh_pos[mask]
+            target = target[mask]
+            sdf = sdf[mask]
 
         # Normalize
         mesh_pos = self.normalize_pos(mesh_pos)
@@ -167,18 +401,40 @@ class ffsDataset(Dataset):
         sdf = self.normalize_sdf(sdf)
 
         # Subsample outputs
-        output_pos, target_feat = self.subsample(self.num_outputs, mesh_pos, target, seed=idx + 1)
+        # output_pos, target_feat = self.subsample(self.num_outputs, mesh_pos, target, seed=idx + 1)
+        if self.num_outputs != float("inf"):
+            if self.mode == "train":
+                seed = None
+            else:
+                seed = idx +1
+            output_pos, target_feat = self.subsample(nrPoints=self.num_outputs, mesh_pos=mesh_pos, features=target, seed=seed)
+        else:
+            target_feat = target
+            output_pos = mesh_pos #.clone()
 
-        if self.use_inferencer_inputs and self.inferencer is not None:
+
+
+        # Subsample inputs
+        if self.use_inferencer_inputs:
             # Use input_pos and input_feat from the inferencer
             input_data = self.preprocess(re, Lo, Ho)
             input_pos = input_data['input_pos']
             input_feat = input_data['input_feat']
         else:
             # Subsample inputs from the current data point
-            input_pos, input_feat = self.subsample(self.num_inputs, mesh_pos, sdf, seed=idx)
-
+            # input_pos, input_feat = self.subsample(self.num_inputs, mesh_pos, sdf, seed=idx)
+            if self.num_inputs != float("inf"):            
+                if self.mode == "train":
+                        seed = None
+                else:
+                    seed = idx
+                input_pos, input_feat = self.subsample(nrPoints=self.num_inputs, mesh_pos=mesh_pos, features=sdf, seed=seed)
+            else:
+                input_feat = sdf
+                input_pos = mesh_pos #.clone()
+        
         return dict(
+            index=idx,
             input_feat=input_feat,
             input_pos=input_pos,
             target_feat=target_feat,
