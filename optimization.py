@@ -37,9 +37,9 @@ class ffsOptProblem(Problem):
         numPoints = 5
         upstreamPoints = torch.tensor([[upstreamX, y] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32)
         downstreamPoints = torch.tensor([[downstreamX, y] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32)
-        points = torch.cat((upstreamPoints, downstreamPoints), dim=0).unsqueeze(0)
+        points = torch.cat((upstreamPoints, downstreamPoints), dim=0) #.unsqueeze(0)
 
-        points = self.inferencer.train_dataset.normalize_pos(points)
+        # points = self.inferencer.train_dataset.normalize_pos(points)
 
         # fluidParameters
         rho = 1.0

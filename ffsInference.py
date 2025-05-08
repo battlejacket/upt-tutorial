@@ -23,7 +23,7 @@ class ffsInference:
 
 
 
-    def infer(self, parameter_sets, batch_size=1):
+    def infer(self, parameter_sets, output_pos=None, batch_size=1):
         """
         Perform inference using the same DataLoader setup as training.
         """
@@ -37,8 +37,8 @@ class ffsInference:
             parameter_sets=parameter_sets,
             useMesh=self.base_dataset.useMesh,
             meshParameters=self.base_dataset.meshParameters,
+            customOutputPos=output_pos,
         )
-
 
         # Create a DataLoader for inference
         inference_dataloader = DataLoader(

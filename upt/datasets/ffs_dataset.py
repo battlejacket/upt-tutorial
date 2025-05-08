@@ -20,7 +20,8 @@ class ffsDataset(Dataset):
             parameter_sets=None,
             use_inferencer_inputs=False,
             useMesh=None,
-            meshParameters=None
+            meshParameters=None,
+            customOutputPos=None,
     ):
         super().__init__()
         self.root = Path(root).expanduser()
@@ -35,6 +36,7 @@ class ffsDataset(Dataset):
         self.obstacleMesh = None
         self.baseMesh = None
         self.baseSdf = None
+        self.customOutputPos = customOutputPos
 
         # Define spatial min/max of simulation
         if self.crop_values is None:
@@ -115,8 +117,11 @@ class ffsDataset(Dataset):
     def signed_distance(self, p, shape):
         pt = Point(p)
         d = pt.distance(shape['boundary'])
-        return d if shape['geo'].contains(pt) else -d
-
+        if self.useMesh == None:
+            return d if shape['geo'].contains(pt) else -d
+        else:
+            return d
+            
     def generate_grid_points(self, Lo, Ho):
         """
         Generate a grid-based point cloud and compute the signed distance function (SDF).
@@ -362,12 +367,19 @@ class ffsDataset(Dataset):
             # Handle inference mode with parameter sets
             re_value, Lo, Ho = self.parameter_sets[idx]
             input_data = self.preprocess(re_value, Lo, Ho)
+            if self.customOutputPos is not None:
+                # Use custom output positions
+                output_pos = self.customOutputPos
+                output_pos = self.normalize_pos(output_pos)
+            else:
+                # Use the same output positions as input positions
+                output_pos = input_data['output_pos']
             return dict(
                 index=idx,
                 input_feat=input_data['input_feat'],
                 input_pos=input_data['input_pos'],
                 target_feat=None,
-                output_pos=input_data['output_pos'],
+                output_pos=output_pos,
                 re=input_data['re'],
                 name=f"param_set_{idx}"
             )
