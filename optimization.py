@@ -60,8 +60,6 @@ class ffsOptProblem(Problem):
         results = self.inferencer.infer(parameter_sets=parameter_sets, output_pos=points)
         prediction = results['predictions']
         
-        return prediction
-        
         upstreamPressures = prediction[:, :, 2][:,:numPoints]
         downstreamPressures = prediction[:, :, 2][:,numPoints:]
 

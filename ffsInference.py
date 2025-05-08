@@ -53,10 +53,10 @@ class ffsInference:
 
         # Perform inference
         for batch in inference_dataloader:
-            for key, value in batch.items():
-                if key == 'name':
-                    continue
-                print(key, value.shape)
+            # for key, value in batch.items():
+            #     if key == 'name':
+            #         continue
+            #     print(key, value.shape)
 
             with torch.no_grad():
                 y_hat = self.model(
@@ -67,14 +67,15 @@ class ffsInference:
                     output_pos=batch["output_pos"].to(self.device),
                     re=batch["re"].to(self.device),
                 )
-            all_predictions.append(y_hat.cpu())
-            all_parameters.extend(batch["name"])
-            all_points.append(batch["output_pos"])
+            all_predictions.append(self.base_dataset.denormalize_feat(y_hat.cpu()))
+            # all_parameters.extend(batch["name"])
+            all_points.append(self.base_dataset.denormalize_pos(batch["output_pos"]))
+
 
         return {
-            "parameters": all_parameters,
-            "points": torch.cat(all_points),
-            "predictions": torch.cat(all_predictions),
+            # "parameters": all_parameters,
+            "points": torch.stack(all_points),
+            "predictions": torch.stack(all_predictions),
         }
     
     # def infer(self, parameter_sets, output_pos=None, batch_size=1):
