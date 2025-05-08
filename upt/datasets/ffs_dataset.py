@@ -6,7 +6,7 @@ from data.ffs.readParameters import readParametersFromFileName
 import pygmsh
 from shapely.geometry import Point, LineString, Polygon
 import numpy as np
-import time  # Add this import at the top of the file
+import time 
 from torch.utils.data import DataLoader
 
 class ffsDataset(Dataset):
@@ -18,7 +18,7 @@ class ffsDataset(Dataset):
             mode,
             crop_values=None,
             parameter_sets=None,
-            use_inferencer_inputs=False,  # New flag to use inputs from the inferencer
+            use_inferencer_inputs=False,
             useMesh=None,
             meshParameters=None
     ):
@@ -34,6 +34,7 @@ class ffsDataset(Dataset):
         self.meshParameters = meshParameters
         self.obstacleMesh = None
         self.baseMesh = None
+        self.baseSdf = None
 
         # Define spatial min/max of simulation
         if self.crop_values is None:
@@ -198,8 +199,8 @@ class ffsDataset(Dataset):
     
         
     def setBaseMesh(self):
-        startTime = time.time()
         baseMesh = torch.load('./data/ffs/baseMesh/mesh_points.th', weights_only=True)
+        baseSdf = torch.load('./data/ffs/baseMesh/mesh_sdf.th', weights_only=True)
         # Load mesh with large obstacle
         name = 'DP600_906,25000000000648_0,55666666666666553_0,49966666666666859'
         obstacleMesh = torch.load(f'./data/ffs/preprocessed600/{name}/mesh_points.th', weights_only=True)
@@ -207,27 +208,19 @@ class ffsDataset(Dataset):
         parametersObs = readParametersFromFileName(name, parameterDef)
         self.LoObs = parametersObs['Lo']
         self.HoObs = parametersObs['Ho']
-        endTime = time.time()
-        print(f"Loading mesh took {endTime - startTime:.4f} seconds.")
 
-        startTime = time.time()
         mask_polygon, usx, dsx, y1 = self.getMaskPolygon(self.LoObs, self.HoObs)
-
 
         baseMesh_np = baseMesh.numpy()
         obstacleMesh_np = obstacleMesh.numpy()
-        endTime = time.time()
-        print(f"Numpy conv. took {endTime - startTime:.4f} seconds.")
 
-        startTime = time.time()
         # Identify points in obstacleMesh that are inside the mask_polygon
         obstacle_points = [Point(p) for p in obstacleMesh_np]
         obstacle_inside_mask = np.array([mask_polygon.contains(pt) for pt in obstacle_points])
 
-        
-
         self.obstacleMesh = obstacleMesh_np[obstacle_inside_mask]
         self.baseMesh = baseMesh_np[(baseMesh_np[:, 0] >= self.xMin) & (baseMesh_np[:, 0] <= self.xMax)]
+        self.baseSdf = baseSdf.numpy()[(baseMesh_np[:, 0] >= self.xMin) & (baseMesh_np[:, 0] <= self.xMax)]
 
         print('base mesh set')
 
@@ -248,13 +241,15 @@ class ffsDataset(Dataset):
         obstacleMesh[:, 1] += self.HoObs - Ho
         obstacleMesh = obstacleMesh[(obstacleMesh[:, 0] >= self.xMin) & (obstacleMesh[:, 0] <= self.xMax)]
         obstacleMesh = obstacleMesh[obstacleMesh[:, 1] <= 0.5]
-
+        obstacleSdf = np.array([self.signed_distance(p, geo) for p in obstacleMesh])
         
-
         baseMesh = self.baseMesh.copy()
-        maskClose = ((baseMesh[:, 0] >= usx) & (baseMesh[:, 0] <= dsx) & (baseMesh[:, 1] >= yl))
+        baseSdf = self.baseSdf.copy()
+        maskClose = ((baseMesh[:, 0] >= usx-0.5) & (baseMesh[:, 0] <= dsx+0.5) & (baseMesh[:, 1] >= yl-0.5))
         baseMeshClose = baseMesh[maskClose]
+        baseSdfClose = baseSdf[maskClose]
         baseMesh = baseMesh[~maskClose]
+        baseSdf = baseSdf[~maskClose]
 
         # startTime = time.time()
         # Identify points in baseMesh that are outside the mask_polygon
@@ -262,24 +257,27 @@ class ffsDataset(Dataset):
         base_outside_mask = np.array([not mask_polygon.contains(pt) for pt in base_points])
         # Keep only points outside the mask in baseMesh
         baseMesh_filtered = baseMeshClose[base_outside_mask]
+        # baseSdf_filtered = baseSdfClose[base_outside_mask]
+        baseSdf_filtered = np.array([self.signed_distance(p, geo) for p in baseMesh_filtered])
         # endTime = time.time()
         # print(f"Creating base mask and contins took {endTime - startTime:.4f} seconds.")
 
         updatedMesh_np = np.vstack((baseMesh, baseMesh_filtered, obstacleMesh))
-        # updatedMesh_np = np.vstack((baseMesh_filtered, obstacleMesh))
-        # updatedMesh_np = baseMesh_filtered
+        updatedSdf_np = np.hstack((baseSdf, baseSdf_filtered, obstacleSdf))
 
         if self.num_outputs != float("inf"):
-            updatedMesh_np = self.subsample(nrPoints=self.num_inputs, mesh_pos=updatedMesh_np, seed=0)
+            # updatedMesh_np = self.subsample(nrPoints=self.num_inputs, mesh_pos=updatedMesh_np, seed=0) #//NOTE// seed?
+            updatedMesh_np, updatedSdf_np = self.subsample(nrPoints=self.num_inputs, mesh_pos=updatedMesh_np, features=updatedSdf_np, seed=0) #//NOTE// seed?
         # startTime = time.time()
+        
         # Compute SDF for the updated mesh
-        sdf = np.array([self.signed_distance(p, geo) for p in updatedMesh_np])
+        # sdf = np.array([self.signed_distance(p, geo) for p in updatedMesh_np])
         # endTime = time.time()
         # print(f"Sdf calc took {endTime - startTime:.4f} seconds.")
 
 
 
-        return updatedMesh_np, sdf
+        return updatedMesh_np, updatedSdf_np
 
     def preprocess(self, re_value, Lo, Ho):
         torch.manual_seed(0)  # Set a fixed seed
