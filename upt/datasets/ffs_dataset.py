@@ -361,6 +361,11 @@ class ffsDataset(Dataset):
             return mesh_pos[perm], features[perm]
         else:
             return mesh_pos[perm]
+        
+    def setInferenceMode(self, parameter_sets):
+        self.mode = 'inference'
+        self.parameter_sets = parameter_sets
+        self.num_values = len(self.parameter_sets)         
 
     def __getitem__(self, idx):
         if self.mode == "inference":

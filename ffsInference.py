@@ -7,6 +7,11 @@ import time  # Add this import at the top of the file
 from torch.utils.data import DataLoader
 from upt.datasets.ffs_dataset import ffsDataset
 from upt.collators.ffs_collator import ffsCollator
+import copy
+
+original = [[1, 2], [3, 4]]
+deep_copy = copy.deepcopy(original)
+
 
 
 class ffsInference:
@@ -21,6 +26,7 @@ class ffsInference:
         # self.xMin = base_dataset.crop_values[0][0]
         # self.xMax = base_dataset.crop_values[1][0]
 
+        self.inference_dataset = copy.deepcopy(base_dataset)
 
 
     def infer(self, parameter_sets, output_pos=None, batch_size=1):
@@ -28,21 +34,25 @@ class ffsInference:
         Perform inference using the same DataLoader setup as training.
         """
         # Create a temporary dataset for inference
-        inference_dataset = ffsDataset(
-            root=self.base_dataset.root,
-            num_inputs=self.base_dataset.num_inputs,
-            num_outputs=self.base_dataset.num_outputs,
-            mode="inference",
-            crop_values=self.base_dataset.crop_values,
-            parameter_sets=parameter_sets,
-            useMesh=self.base_dataset.useMesh,
-            meshParameters=self.base_dataset.meshParameters,
-            customOutputPos=output_pos,
-        )
-
+        # self.inference_dataset = ffsDataset(
+        #     root=self.base_dataset.root,
+        #     num_inputs=self.base_dataset.num_inputs,
+        #     num_outputs=self.base_dataset.num_outputs,
+        #     mode="inference",
+        #     crop_values=self.base_dataset.crop_values,
+        #     parameter_sets=parameter_sets,
+        #     useMesh=self.base_dataset.useMesh,
+        #     meshParameters=self.base_dataset.meshParameters,
+        #     customOutputPos=output_pos,
+        # )
+        
+        # self.inference_dataset = copy.deepcopy( self.base_dataset)
+        self.inference_dataset.setInferenceMode(parameter_sets)
+        self.inference_dataset.customOutputPos=output_pos
+        
         # Create a DataLoader for inference
         inference_dataloader = DataLoader(
-            dataset=inference_dataset,
+            dataset=self.inference_dataset,
             batch_size=batch_size,
             collate_fn=ffsCollator(num_supernodes=self.numSupernodes, deterministic=True),
         )
