@@ -214,18 +214,22 @@ class ffsDataset(Dataset):
         self.LoObs = parametersObs['Lo']
         self.HoObs = parametersObs['Ho']
 
-        mask_polygon, usx, dsx, y1 = self.getMaskPolygon(self.LoObs, self.HoObs)
+        mask_polygon, usx, dsx, yl = self.getMaskPolygon(self.LoObs, self.HoObs)
 
         baseMesh_np = baseMesh.numpy()
         obstacleMesh_np = obstacleMesh.numpy()
+        baseSdf_np = baseSdf.numpy()
 
         # Identify points in obstacleMesh that are inside the mask_polygon
-        obstacle_points = [Point(p) for p in obstacleMesh_np]
-        obstacle_inside_mask = np.array([mask_polygon.contains(pt) for pt in obstacle_points])
+        # obstacle_points = [Point(p) for p in obstacleMesh_np]
+        # obstacleMask = np.array([mask_polygon.contains(pt) for pt in obstacle_points])
 
-        self.obstacleMesh = obstacleMesh_np[obstacle_inside_mask]
-        self.baseMesh = baseMesh_np[(baseMesh_np[:, 0] >= self.xMin) & (baseMesh_np[:, 0] <= self.xMax)]
-        self.baseSdf = baseSdf.numpy()[(baseMesh_np[:, 0] >= self.xMin) & (baseMesh_np[:, 0] <= self.xMax)]
+        obstacleMask = ((obstacleMesh_np[:, 0] >= usx) & (obstacleMesh_np[:, 0] <= dsx) & (obstacleMesh_np[:, 1] >= yl))
+        baseMask = (baseMesh_np[:, 0] >= self.xMin) & (baseMesh_np[:, 0] <= self.xMax)
+
+        self.obstacleMesh = obstacleMesh_np[obstacleMask]
+        self.baseMesh = baseMesh_np[baseMask]
+        self.baseSdf = baseSdf_np[baseMask]
 
         print('base mesh set')
 
@@ -256,32 +260,33 @@ class ffsDataset(Dataset):
         # startTime = time.time()
         baseMesh = self.baseMesh.copy()
         baseSdf = self.baseSdf.copy()
-        maskClose = ((baseMesh[:, 0] >= usx-0.05) & (baseMesh[:, 0] <= dsx+0.05) & (baseMesh[:, 1] >= yl-0.05))
-        # maskClose = ((baseMesh[:, 0] >= usx-0.05) & (baseMesh[:, 0] <= dsx+0.05))
-        baseMeshClose = baseMesh[maskClose]
-        baseSdfClose = baseSdf[maskClose]
+        # maskClose = ((baseMesh[:, 0] >= usx-0.05) & (baseMesh[:, 0] <= dsx+0.05) & (baseMesh[:, 1] >= yl-0.05))
+        maskClose = ((baseMesh[:, 0] >= usx) & (baseMesh[:, 0] <= dsx) & (baseMesh[:, 1] >= yl))
+        # baseMeshClose = baseMesh[maskClose]
+        # baseSdfClose = baseSdf[maskClose]
         baseMesh = baseMesh[~maskClose]
         baseSdf = baseSdf[~maskClose]
         # print(f"Masking base mesh arounf obstacle took {time.time() - startTime:.4f} seconds.")
 
         # startTime = time.time()
         # Identify points in baseMesh that are outside the mask_polygon
-        base_points = [Point(p) for p in baseMeshClose]
-        base_outside_mask = np.array([not mask_polygon.contains(pt) for pt in base_points])
+        # base_points = [Point(p) for p in baseMeshClose]
+        # base_outside_mask = np.array([not mask_polygon.contains(pt) for pt in base_points])
         # print(f"Creating mask for close base mesh using polygon took {time.time() - startTime:.4f} seconds.")
         
         # startTime = time.time()
         # Keep only points outside the mask in baseMesh
-        baseMesh_filtered = baseMeshClose[base_outside_mask]
-        baseSdf_filtered = baseSdfClose[base_outside_mask]
+        # baseMesh_filtered = baseMeshClose[base_outside_mask]
+        # baseSdf_filtered = baseSdfClose[base_outside_mask]
         # baseSdf_filtered = np.array([self.signed_distance(p, geo) for p in baseMesh_filtered])
         # print(f"Masking close base mesh using polygon took {time.time() - startTime:.4f} seconds.")
 
 
         # startTime = time.time()
-        updatedMesh_np = np.vstack((baseMesh, baseMesh_filtered, obstacleMesh))
-        updatedSdf_np = np.hstack((baseSdf, baseSdf_filtered, obstacleSdf))
-        # print(f"Stacking took {time.time() - startTime:.4f} seconds.")
+        # updatedMesh_np = np.vstack((baseMesh, baseMesh_filtered, obstacleMesh))
+        # updatedSdf_np = np.hstack((baseSdf, baseSdf_filtered, obstacleSdf))
+        updatedMesh_np = np.vstack((baseMesh, obstacleMesh))
+        updatedSdf_np = np.hstack((baseSdf, obstacleSdf))        # print(f"Stacking took {time.time() - startTime:.4f} seconds.")
 
         if self.num_outputs != float("inf"):
             # updatedMesh_np = self.subsample(nrPoints=self.num_inputs, mesh_pos=updatedMesh_np, seed=0) #//NOTE// seed?
