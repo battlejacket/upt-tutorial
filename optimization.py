@@ -34,7 +34,7 @@ class ffsOptProblem(Problem):
         # Create points to use for inference, one line upsteam and one line downstream of the step
         upstreamX = -4
         downstreamX = 4
-        numPoints = 5
+        numPoints = 100
         upstreamPoints = torch.tensor([[upstreamX, y] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32)
         downstreamPoints = torch.tensor([[downstreamX, y] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32)
         points = torch.cat((upstreamPoints, downstreamPoints), dim=0) #.unsqueeze(0)
