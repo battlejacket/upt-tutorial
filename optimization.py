@@ -32,8 +32,8 @@ class ffsOptProblem(Problem):
         # print("Generation " + str(self.gen) + ": Evaluating " + str(allDesigns.shape[0]) + " Designs in " + str(batches) + " Batches")
         
         # Create points to use for inference, one line upsteam and one line downstream of the step
-        upstreamX = -3
-        downstreamX = 3
+        upstreamX = -4
+        downstreamX = 4
         numPoints = 5
         upstreamPoints = torch.tensor([[upstreamX, y] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32)
         downstreamPoints = torch.tensor([[downstreamX, y] for y in np.linspace(-0.5, 0.5, numPoints)], dtype=torch.float32)
