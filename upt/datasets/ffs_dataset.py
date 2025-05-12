@@ -235,11 +235,14 @@ class ffsDataset(Dataset):
         """
         geo = self.ffsGeo(Lo=Lo, Ho=Ho)
 
+        # startTime = time.time()
         if self.baseMesh is None:
             self.setBaseMesh()
+        # print(f"Set base mesh took {time.time() - startTime:.4f} seconds.")
 
         mask_polygon, usx, dsx, yl  = self.getMaskPolygon(Lo, Ho)
 
+        # startTime = time.time()
         # Move obstacleMesh to correct location
         obstacleMesh = self.obstacleMesh.copy()
         obstacleMesh[:, 0] += self.LoObs - Lo
@@ -247,40 +250,48 @@ class ffsDataset(Dataset):
         obstacleMesh = obstacleMesh[(obstacleMesh[:, 0] >= self.xMin) & (obstacleMesh[:, 0] <= self.xMax)]
         obstacleMesh = obstacleMesh[obstacleMesh[:, 1] <= 0.5]
         obstacleSdf = np.array([self.signed_distance(p, geo) for p in obstacleMesh])
+        # print(f"Moving obstacle mesh and calculating sdf took {time.time() - startTime:.4f} seconds.")
         
+        # startTime = time.time()
         baseMesh = self.baseMesh.copy()
         baseSdf = self.baseSdf.copy()
-        maskClose = ((baseMesh[:, 0] >= usx-0.5) & (baseMesh[:, 0] <= dsx+0.5) & (baseMesh[:, 1] >= yl-0.5))
+        # maskClose = ((baseMesh[:, 0] >= usx-0.5) & (baseMesh[:, 0] <= dsx+0.5) & (baseMesh[:, 1] >= yl-0.5))
+        maskClose = ((baseMesh[:, 0] >= usx-0.05) & (baseMesh[:, 0] <= dsx+0.05))
         baseMeshClose = baseMesh[maskClose]
         baseSdfClose = baseSdf[maskClose]
         baseMesh = baseMesh[~maskClose]
         baseSdf = baseSdf[~maskClose]
+        # print(f"Masking base mesh arounf obstacle took {time.time() - startTime:.4f} seconds.")
 
         # startTime = time.time()
         # Identify points in baseMesh that are outside the mask_polygon
         base_points = [Point(p) for p in baseMeshClose]
         base_outside_mask = np.array([not mask_polygon.contains(pt) for pt in base_points])
+        # print(f"Creating mask for close base mesh using polygon took {time.time() - startTime:.4f} seconds.")
+        
+        # startTime = time.time()
         # Keep only points outside the mask in baseMesh
         baseMesh_filtered = baseMeshClose[base_outside_mask]
-        # baseSdf_filtered = baseSdfClose[base_outside_mask]
-        baseSdf_filtered = np.array([self.signed_distance(p, geo) for p in baseMesh_filtered])
-        # endTime = time.time()
-        # print(f"Creating base mask and contins took {endTime - startTime:.4f} seconds.")
+        baseSdf_filtered = baseSdfClose[base_outside_mask]
+        # baseSdf_filtered = np.array([self.signed_distance(p, geo) for p in baseMesh_filtered])
+        # print(f"Masking close base mesh using polygon took {time.time() - startTime:.4f} seconds.")
 
+
+        # startTime = time.time()
         updatedMesh_np = np.vstack((baseMesh, baseMesh_filtered, obstacleMesh))
         updatedSdf_np = np.hstack((baseSdf, baseSdf_filtered, obstacleSdf))
+        # print(f"Stacking took {time.time() - startTime:.4f} seconds.")
 
         if self.num_outputs != float("inf"):
             # updatedMesh_np = self.subsample(nrPoints=self.num_inputs, mesh_pos=updatedMesh_np, seed=0) #//NOTE// seed?
             updatedMesh_np, updatedSdf_np = self.subsample(nrPoints=self.num_inputs, mesh_pos=updatedMesh_np, features=updatedSdf_np, seed=0) #//NOTE// seed?
-        # startTime = time.time()
         
-        # Compute SDF for the updated mesh
-        # sdf = np.array([self.signed_distance(p, geo) for p in updatedMesh_np])
-        # endTime = time.time()
-        # print(f"Sdf calc took {endTime - startTime:.4f} seconds.")
-
-
+        # Update SDF around obstacle
+        # startTime = time.time()
+        maskClose = ((updatedMesh_np[:, 0] >= usx-0.5) & (updatedMesh_np[:, 0] <= dsx+0.5))
+        points_close = updatedMesh_np[maskClose]
+        updatedSdf_np[maskClose] = np.array([self.signed_distance(p, geo) for p in points_close])
+        # print(f"Updating SDF around obstacle took {time.time() - startTime:.4f} seconds.")
 
         return updatedMesh_np, updatedSdf_np
 

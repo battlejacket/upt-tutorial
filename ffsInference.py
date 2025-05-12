@@ -45,14 +45,14 @@ class ffsInference:
                     output_pos=batch["output_pos"].to(self.device),
                     re=batch["re"].to(self.device),
                 )
-            all_predictions.append(y_hat.cpu())
-            all_points.append(batch["output_pos"])
+            # all_predictions.append(y_hat.cpu())
+            # all_points.append(batch["output_pos"])
+            all_predictions.append(self.base_dataset.denormalize_feat(y_hat.cpu()))
+            all_points.append(self.base_dataset.denormalize_pos(batch["output_pos"]))
 
         # Concatenate predictions and points across batches
-        # all_predictions = torch.cat(all_predictions, dim=0)
-        # all_points = torch.cat(all_points, dim=0)
-        all_predictions.append(self.base_dataset.denormalize_feat(y_hat.cpu()))
-        all_points.append(self.base_dataset.denormalize_pos(batch["output_pos"]))
+        all_predictions = torch.cat(all_predictions, dim=0)
+        all_points = torch.cat(all_points, dim=0)
 
         return {
             "points": all_points,
