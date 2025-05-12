@@ -249,14 +249,15 @@ class ffsDataset(Dataset):
         obstacleMesh[:, 1] += self.HoObs - Ho
         obstacleMesh = obstacleMesh[(obstacleMesh[:, 0] >= self.xMin) & (obstacleMesh[:, 0] <= self.xMax)]
         obstacleMesh = obstacleMesh[obstacleMesh[:, 1] <= 0.5]
-        obstacleSdf = np.array([self.signed_distance(p, geo) for p in obstacleMesh])
-        # print(f"Moving obstacle mesh and calculating sdf took {time.time() - startTime:.4f} seconds.")
+        obstacleSdf = np.ones(len(obstacleMesh))
+        # obstacleSdf = np.array([self.signed_distance(p, geo) for p in obstacleMesh])
+        # print(f"Moving obstacle mesh (and calculating sdf) took {time.time() - startTime:.4f} seconds.")
         
         # startTime = time.time()
         baseMesh = self.baseMesh.copy()
         baseSdf = self.baseSdf.copy()
-        # maskClose = ((baseMesh[:, 0] >= usx-0.5) & (baseMesh[:, 0] <= dsx+0.5) & (baseMesh[:, 1] >= yl-0.5))
-        maskClose = ((baseMesh[:, 0] >= usx-0.05) & (baseMesh[:, 0] <= dsx+0.05))
+        maskClose = ((baseMesh[:, 0] >= usx-0.05) & (baseMesh[:, 0] <= dsx+0.05) & (baseMesh[:, 1] >= yl-0.05))
+        # maskClose = ((baseMesh[:, 0] >= usx-0.05) & (baseMesh[:, 0] <= dsx+0.05))
         baseMeshClose = baseMesh[maskClose]
         baseSdfClose = baseSdf[maskClose]
         baseMesh = baseMesh[~maskClose]
