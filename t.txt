@@ -1,0 +1,41 @@
+defining problem
+Optimizing: 100
+Optimization Done in  2105.63555932045
+Best Design Objective Value:  [19.58245087]
+Best Design Parameter Value:  [0.24846615 0.37696256]
+Optimizing: 200
+Optimization Done in  1890.5896909236908
+Best Design Objective Value:  [14.19694424]
+Best Design Parameter Value:  [0.20006688 0.39794165]
+Optimizing: 300
+Optimization Done in  2124.725251197815
+Best Design Objective Value:  [12.09836578]
+Best Design Parameter Value:  [0.24872638 0.42235588]
+Optimizing: 400
+Optimization Done in  1911.2079520225525
+Best Design Objective Value:  [11.00072479]
+Best Design Parameter Value:  [0.27720946 0.41481873]
+Optimizing: 500
+Optimization Done in  2281.054934501648
+Best Design Objective Value:  [10.31688309]
+Best Design Parameter Value:  [0.32708374 0.41809883]
+Optimizing: 600
+Optimization Done in  1927.922538280487
+Best Design Objective Value:  [9.86373711]
+Best Design Parameter Value:  [0.31608253 0.41406116]
+Optimizing: 700
+Optimization Done in  1941.2817332744598
+Best Design Objective Value:  [9.51319504]
+Best Design Parameter Value:  [0.32598929 0.41827197]
+Optimizing: 800
+Optimization Done in  2160.6625096797943
+Best Design Objective Value:  [9.21894455]
+Best Design Parameter Value:  [0.32607857 0.40746775]
+Optimizing: 900
+Optimization Done in  2170.1123039722443
+Best Design Objective Value:  [8.97847843]
+Best Design Parameter Value:  [0.3822128  0.43830699]
+Optimizing: 1000
+Optimization Done in  2169.58017206192
+Best Design Objective Value:  [8.79548073]
+Best Design Parameter Value:  [0.37686994 0.40727494]
