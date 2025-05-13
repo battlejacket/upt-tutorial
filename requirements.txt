@@ -5,6 +5,7 @@ numpy
 PyYAML
 shapely
 zipp
+pandas
 
 # PyTorch ecosystem
 torchmetrics

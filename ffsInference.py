@@ -17,7 +17,7 @@ class ffsInference:
         self.device = device
         self.inference_dataset = copy.deepcopy(base_dataset)
 
-    def infer(self, parameter_sets, output_pos=None, batch_size=1):
+    def infer(self, parameter_sets, output_pos=None, batch_size=100):
         """
         Perform inference using the same DataLoader setup as training.
         """
