@@ -61,6 +61,7 @@ class ffsDataset(Dataset):
         self.uris = []
         # self.TEST_INDICES = []
         self.parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
+        # self.parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float, 'dCp': float}
             
         self.TEST_INDICES = [445, 383, 382, 521, 163, 403, 143, 344, 487, 375, 338, 432, 472,  53,
         451, 510,  78, 280,  62, 552,  50, 207, 282, 532, 291,  76, 332, 257,
@@ -411,11 +412,13 @@ class ffsDataset(Dataset):
         u = torch.load(self.uris[idx] / "u.th", weights_only=True)
         v = torch.load(self.uris[idx] / "v.th", weights_only=True)
         p = torch.load(self.uris[idx] / "p.th", weights_only=True)
+        # dCp = torch.load(self.uris[idx] / "dCp.th", weights_only=True)
         target = torch.cat((u, v, p), dim=1)
         parameters = readParametersFromFileName(self.uris[idx].name, self.parameterDef)
         re = parameters['re']
         Lo = parameters['Lo']
         Ho = parameters['Ho']
+        # dCp = parameters['dCp']
         sdf = torch.load(self.uris[idx] / "mesh_sdf.th", weights_only=True).unsqueeze(1).float()
        
         if self.crop_values is not None:
@@ -473,4 +476,5 @@ class ffsDataset(Dataset):
             output_pos=output_pos,
             re=re,
             name=str(self.uris[idx].name),
+            # dCp=dCp
         )
