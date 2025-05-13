@@ -60,8 +60,8 @@ class ffsDataset(Dataset):
 
         self.uris = []
         # self.TEST_INDICES = []
-        self.parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
-        # self.parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float, 'dCp': float}
+        # self.parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
+        self.parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float, 'dCp': float}
             
         self.TEST_INDICES = [445, 383, 382, 521, 163, 403, 143, 344, 487, 375, 338, 432, 472,  53,
         451, 510,  78, 280,  62, 552,  50, 207, 282, 532, 291,  76, 332, 257,
@@ -208,7 +208,7 @@ class ffsDataset(Dataset):
         baseMesh = torch.load('./data/ffs/baseMesh/mesh_points.th', weights_only=True)
         baseSdf = torch.load('./data/ffs/baseMesh/mesh_sdf.th', weights_only=True)
         # Load mesh with large obstacle
-        name = 'DP600_906,25000000000648_0,55666666666666553_0,49966666666666859'
+        name = 'DP600_906,2500000000064_0,5566666666666655_0,4996666666666685_9,63446'
         obstacleMesh = torch.load(f'./data/ffs/preprocessed600/{name}/mesh_points.th', weights_only=True)
         parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
         parametersObs = readParametersFromFileName(name, parameterDef)
@@ -404,7 +404,8 @@ class ffsDataset(Dataset):
                 target_feat=None,
                 output_pos=output_pos,
                 re=input_data['re'],
-                name=f"param_set_{idx}"
+                name=f"param_set_{idx}",
+                dCp=None
             )
 
         # Training/test mode
@@ -412,13 +413,12 @@ class ffsDataset(Dataset):
         u = torch.load(self.uris[idx] / "u.th", weights_only=True)
         v = torch.load(self.uris[idx] / "v.th", weights_only=True)
         p = torch.load(self.uris[idx] / "p.th", weights_only=True)
-        # dCp = torch.load(self.uris[idx] / "dCp.th", weights_only=True)
         target = torch.cat((u, v, p), dim=1)
         parameters = readParametersFromFileName(self.uris[idx].name, self.parameterDef)
         re = parameters['re']
         Lo = parameters['Lo']
         Ho = parameters['Ho']
-        # dCp = parameters['dCp']
+        dCp = parameters['dCp']
         sdf = torch.load(self.uris[idx] / "mesh_sdf.th", weights_only=True).unsqueeze(1).float()
        
         if self.crop_values is not None:
@@ -467,6 +467,13 @@ class ffsDataset(Dataset):
             else:
                 input_feat = sdf
                 input_pos = mesh_pos #.clone()
+
+        if self.customOutputPos is not None:
+            # Use custom output positions
+            output_pos = self.customOutputPos
+            output_pos = self.normalize_pos(output_pos)
+            target_feat = None
+
         
         return dict(
             index=idx,
@@ -476,5 +483,5 @@ class ffsDataset(Dataset):
             output_pos=output_pos,
             re=re,
             name=str(self.uris[idx].name),
-            # dCp=dCp
+            dCp=dCp
         )
