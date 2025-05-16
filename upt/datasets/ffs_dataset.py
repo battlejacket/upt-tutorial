@@ -128,9 +128,11 @@ class ffsDataset(Dataset):
         Generate a grid-based point cloud and compute the signed distance function (SDF).
         """
         if self.num_inputs == float("inf"):
-            num_points = 10000
+            num_points = 2.5*10**4  # approx no points in mesh
         else:
             num_points = self.num_inputs  
+        num_points *=(3/2) # increase no points to compensate for the ones removed by the step. 
+        
         aspect = (self.xMax - self.xMin) / 1
         Ny = int(np.sqrt(num_points / aspect))
         Nx = int(num_points / Ny)
