@@ -1,5 +1,7 @@
 import torch
 from torch.utils.data import default_collate
+from sklearn.neighbors import KernelDensity
+import numpy as np
 
 class ffsCollator:
     def __init__(self, num_supernodes, deterministic):
@@ -37,6 +39,36 @@ class ffsCollator:
             supernode_idxs.append(perm)
             supernodes_offset += input_lens[i]
         collated_batch["supernode_idxs"] = torch.concat(supernode_idxs)
+
+        if False:
+            # Combine all CFD training input points into a single array
+            all_mesh_points = np.concatenate(all_training_mesh_points, axis=0)  # shape (N_total, 2)
+
+            # Fit KDE
+            kde = KernelDensity(kernel='gaussian', bandwidth=0.1).fit(all_mesh_points)
+
+            log_densities = kde.score_samples(inference_points)  # shape (N_points,)
+            densities = np.exp(log_densities)
+            
+            probs = densities / np.sum(densities)
+
+            num_supernodes = 128  # or whatever you normally use
+            supernode_idxs = np.random.choice(
+                len(inference_points),
+                size=num_supernodes,
+                replace=False,
+                p=probs
+            )
+
+            # from scipy.stats import multivariate_normal
+
+            # mu = [x_center, y_center]  # e.g., where the step is
+            # cov = [[σx**2, 0], [0, σy**2]]
+
+            # rv = multivariate_normal(mean=mu, cov=cov)
+            # densities = rv.pdf(inference_points)
+            # probs = densities / np.sum(densities)
+
 
         # create batch_idx tensor
         batch_idx = torch.empty(sum(input_lens), dtype=torch.long)
