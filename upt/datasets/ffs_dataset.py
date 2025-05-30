@@ -100,8 +100,10 @@ class ffsDataset(Dataset):
         return self.num_values
 
     def ffsGeo(self, Lo, Ho):
-            xMax = 12
-            xMin = -6
+            # xMax = 12 # non SST
+            # xMin = -6 # non SST
+            xMax = 12 # SST, also works for non SST
+            xMin = -6 # SST, also works for non SST
             Wo = 0.1
             
             bPoints = [

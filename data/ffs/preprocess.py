@@ -56,8 +56,10 @@ def parse_args():
 #     return sdf_values
 
 def ffsGeo(Ho, Lo):
-    xMax = 12
-    xMin = -6
+    # xMax = 12 # non SST
+    # xMin = -6 # non SST
+    xMax = 12 # SST
+    xMin = -6 # SST
     Wo = 0.1
     bPoints = [
         Point(xMin, 0.5), Point(-Lo, 0.5), Point(-Lo, 0.5 - Ho),
