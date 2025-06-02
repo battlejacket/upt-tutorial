@@ -102,8 +102,8 @@ class ffsDataset(Dataset):
     def ffsGeo(self, Lo, Ho):
             # xMax = 12 # non SST
             # xMin = -6 # non SST
-            xMax = 12 # SST, also works for non SST
-            xMin = -6 # SST, also works for non SST
+            xMax = 12 # SST
+            xMin = -12 # SST
             Wo = 0.1
             
             bPoints = [
@@ -133,7 +133,7 @@ class ffsDataset(Dataset):
             num_points = 2.5*10**4  # approx no points in mesh
         else:
             num_points = self.num_inputs  
-        num_points *=(3/2) # increase no points to compensate for the ones removed by the step. 
+        num_points *=(3/2) # increase no points to compensate for the ones removed by the step. UPDATE for SST if used
         
         aspect = (self.xMax - self.xMin) / 1
         Ny = int(np.sqrt(num_points / aspect))
@@ -350,11 +350,11 @@ class ffsDataset(Dataset):
         return pos
 
     def normalize_feat(self, feat):
-        feat = feat.sub(self.mean[:-1]).div(self.std[:-1])
+        feat = feat.sub(self.mean[:-2]).div(self.std[:-2])
         return feat
 
     def denormalize_feat(self, feat):
-        feat = feat.mul(self.std[:-1]).add(self.mean[:-1])
+        feat = feat.mul(self.std[:-2]).add(self.mean[:-2])
         return feat
 
     def normalize_sdf(self, sdf):
@@ -366,11 +366,13 @@ class ffsDataset(Dataset):
         return sdf
 
     def normalize_re(self, re):
-        re = (re - 550) / 260
+        # re = (re - 550) / 260
+        re = re.mul(self.std[-2]).add(self.mean[-2])
         return re
 
     def denormalize_re(self, re):
-        re = (re * 260) + 550
+        # re = (re * 260) + 550
+        re = re.mul(self.std[-2]).add(self.mean[-2])
         return re
 
     def subsample(self, nrPoints, mesh_pos, features=None, seed=None):
