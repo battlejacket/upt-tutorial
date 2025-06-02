@@ -59,7 +59,7 @@ def ffsGeo(Ho, Lo):
     # xMax = 12 # non SST
     # xMin = -6 # non SST
     xMax = 12 # SST
-    xMin = -6 # SST
+    xMin = -12 # SST
     Wo = 0.1
     bPoints = [
         Point(xMin, 0.5), Point(-Lo, 0.5), Point(-Lo, 0.5 - Ho),
@@ -78,7 +78,7 @@ def signed_distance(p, shape):
 
 
 
-def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
+def main(src, dst, compute_sdf_values = True, save_normalization_param = True, sst=False):
     src = Path(src).expanduser()
     assert src.exists(), f"'{src.as_posix()}' doesnt exist"
     # assert src.name == "training_data"
@@ -110,6 +110,12 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
     dictOutvarNames = ["u", "v", "p"]
     scales = {"p": (0,1), "u": (0,1), "v": (0,1), "x": (0,1), "y": (-0.5,1)} #(translation, scale)
     skiprows = 0
+    
+    if sst:
+        csvInvarNames += ["Wall_Distance"]
+        dictInvarNames += ["sdf"]
+        scales["sdf"] = (0, 1)
+    
     csvVarNames = csvInvarNames + csvOutvarNames
     dictVarNames = dictInvarNames + dictOutvarNames
 
@@ -120,8 +126,8 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
     # Initialize variables for min/max coordinates and mean/std calculations
     min_coords = torch.tensor([float('inf'), float('inf')])
     max_coords = torch.tensor([-float('inf'), -float('inf')])
-    sum_vars = torch.tensor([0.0, 0.0, 0.0, 0.0])  # For u, v, p, sdf
-    sum_sq_vars = torch.tensor([0.0, 0.0, 0.0, 0.0])  # For u^2, v^2, p^2, sdf^2
+    sum_vars = torch.tensor([0.0, 0.0, 0.0, 0.0, 0.0])  # For u, v, p, Re, sdf
+    sum_sq_vars = torch.tensor([0.0, 0.0, 0.0, 0.0, 0.0])  # For u^2, v^2, p^2, Re^2, sdf^2
     total_samples = 0
 
         
@@ -129,6 +135,9 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
         reluri = uri.relative_to(src).with_suffix('')
         out = dst / reluri
         out.mkdir(exist_ok=True, parents=True)
+        
+        parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
+        parameters = readParametersFromFileName(uri.name, parameterDef)
         
         #read and process csv
         csvData = csv_to_dict(uri, mapping=mapping, delimiter=",", skiprows=skiprows)
@@ -142,6 +151,17 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
         min_coords = torch.min(min_coords, mesh_points.min(dim=0).values)
         max_coords = torch.max(max_coords, mesh_points.max(dim=0).values)
         torch.save(mesh_points, out / "mesh_points.th")
+        
+        re = torch.tensor(parameters['re']).float()
+        sum_vars[-2] += re.sum()
+        sum_sq_vars[-2] += (re ** 2).sum()
+        
+        # Save sdf if SST
+        if sst:
+            sdf_values = torch.tensor(csvData["sdf"]).float().squeeze()
+            torch.save(sdf_values, out / "mesh_sdf.th")
+            sum_vars[-1] += sdf_values.sum()
+            sum_sq_vars[-1] += (sdf_values ** 2).sum()
 
         # Save target variables
         for i, outVar in enumerate(dictOutvarNames):  # u, v, p
@@ -151,11 +171,7 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
             sum_sq_vars[i] += (data ** 2).sum()
         total_samples += data.numel()
 
-        if compute_sdf_values:
-            parameterDef = {'name': str, 're': float, 'Lo': float, 'Ho': float}
-            parameters = readParametersFromFileName(uri.name, parameterDef)
-
-            # parameters = str(uri).split('DP')[1].replace('.csv', '').replace(',', '.').split('_')[1:]
+        if compute_sdf_values and not sst:
 
             # re = float(parameters[0])
             Lo = float(parameters[1])
@@ -175,20 +191,18 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
             #     boundaryCsvDict[key] /= scales[key][1]
             # boundaryPoints = np.concat([boundaryCsvDict["x"], boundaryCsvDict["y"]], axis=1)
 
-            # # Save sdf3
+            # # Save sdf
             # print('computing sdf')
             # sdf_values = torch.tensor(compute_sdf(mesh_points, boundaryPoints)).float()
             # print('sdf computed')
             torch.save(sdf_values, out / "mesh_sdf.th")
             sum_vars[-1] += sdf_values.sum()
             sum_sq_vars[-1] += (sdf_values ** 2).sum()
-            # total_samples += sdf_values.numel()
 
     if save_normalization_param:
         # Calculate mean and std
         mean_vars = sum_vars / total_samples
         std_vars = torch.sqrt((sum_sq_vars / total_samples) - (mean_vars ** 2))
-        print(dst)
         # Save normalization parameters
         torch.save({"min_coords": min_coords, "max_coords": max_coords}, dst / "coords_norm.th")
         torch.save({"mean": mean_vars, "std": std_vars}, dst / "vars_norm.th")
@@ -198,4 +212,4 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True):
 
 if __name__ == "__main__":
     # main(**parse_args())
-    main('./data/ffs/baseMesh/', './data/ffs/baseMesh/', compute_sdf_values=False, save_normalization_param=False)
+    main('./data/ffs/csv/SST/', './data/ffs/preprocessedSST/', compute_sdf_values=False, save_normalization_param=True, sst=True)
