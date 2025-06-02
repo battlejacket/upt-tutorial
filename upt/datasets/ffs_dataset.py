@@ -350,29 +350,29 @@ class ffsDataset(Dataset):
         return pos
 
     def normalize_feat(self, feat):
-        feat = feat.sub(self.mean[:-2]).div(self.std[:-2])
+        feat = feat.sub(self.mean[:3]).div(self.std[:3])
         return feat
 
     def denormalize_feat(self, feat):
-        feat = feat.mul(self.std[:-2]).add(self.mean[:-2])
+        feat = feat.mul(self.std[:3]).add(self.mean[:3])
         return feat
 
     def normalize_sdf(self, sdf):
-        sdf = sdf.sub(self.mean[-1]).div(self.std[-1])
+        sdf = sdf.sub(self.mean[-2]).div(self.std[-2])
         return sdf
 
     def denormalize_sdf(self, sdf):
-        sdf = sdf.mul(self.std[-1]).add(self.mean[-1])
+        sdf = sdf.mul(self.std[-2]).add(self.mean[-2])
         return sdf
 
     def normalize_re(self, re):
         # re = (re - 550) / 260
-        re = re.mul(self.std[-2]).add(self.mean[-2])
+        re = (re -self.std[-1]) / self.mean[-1]
         return re
 
     def denormalize_re(self, re):
         # re = (re * 260) + 550
-        re = re.mul(self.std[-2]).add(self.mean[-2])
+        re = (re * self.std[-1]) + self.mean[-1]
         return re
 
     def subsample(self, nrPoints, mesh_pos, features=None, seed=None):

@@ -56,10 +56,10 @@ def parse_args():
 #     return sdf_values
 
 def ffsGeo(Ho, Lo):
-    # xMax = 12 # non SST
-    # xMin = -6 # non SST
-    xMax = 12 # SST
-    xMin = -12 # SST
+    xMax = 12 # non SST
+    xMin = -6 # non SST
+    # xMax = 12 # SST
+    # xMin = -12 # SST
     Wo = 0.1
     bPoints = [
         Point(xMin, 0.5), Point(-Lo, 0.5), Point(-Lo, 0.5 - Ho),
@@ -74,7 +74,8 @@ def ffsGeo(Ho, Lo):
 def signed_distance(p, shape):
     pt = Point(p)
     d = pt.distance(shape['boundary'])
-    return d if shape['geo'].contains(pt) else -d
+    # return d if shape['geo'].contains(pt) else -d
+    return d
 
 
 
@@ -126,8 +127,10 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True, s
     # Initialize variables for min/max coordinates and mean/std calculations
     min_coords = torch.tensor([float('inf'), float('inf')])
     max_coords = torch.tensor([-float('inf'), -float('inf')])
-    sum_vars = torch.tensor([0.0, 0.0, 0.0, 0.0, 0.0])  # For u, v, p, Re, sdf
-    sum_sq_vars = torch.tensor([0.0, 0.0, 0.0, 0.0, 0.0])  # For u^2, v^2, p^2, Re^2, sdf^2
+    sum_vars = torch.tensor([0.0, 0.0, 0.0, 0.0])  # For u, v, p, sdf
+    sum_sq_vars = torch.tensor([0.0, 0.0, 0.0, 0.0])  # For u^2, v^2, p^2, sdf^2
+    sum_re = torch.tensor(0.0)  # For re
+    sum_sq_re = torch.tensor(0.0)  # For re^2
     total_samples = 0
 
         
@@ -153,8 +156,8 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True, s
         torch.save(mesh_points, out / "mesh_points.th")
         
         re = torch.tensor(parameters['re']).float()
-        sum_vars[-2] += re.sum()
-        sum_sq_vars[-2] += (re ** 2).sum()
+        sum_re += re
+        sum_sq_re += re ** 2
         
         # Save sdf if SST
         if sst:
@@ -173,9 +176,8 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True, s
 
         if compute_sdf_values and not sst:
 
-            # re = float(parameters[0])
-            Lo = float(parameters[1])
-            Ho = float(parameters[2])
+            Lo = float(parameters['Lo'])
+            Ho = float(parameters['Ho'])
 
             # Compute and store baseline SDF
             geo = ffsGeo(Ho=Ho, Lo=Lo)
@@ -203,6 +205,12 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True, s
         # Calculate mean and std
         mean_vars = sum_vars / total_samples
         std_vars = torch.sqrt((sum_sq_vars / total_samples) - (mean_vars ** 2))
+        mean_re = sum_re / len(uris)
+        std_re = torch.sqrt((sum_sq_re / len(uris)) - (mean_re ** 2))
+        mean_vars = torch.cat((mean_vars, mean_re.unsqueeze(0)))
+        std_vars = torch.cat((std_vars, std_re.unsqueeze(0)))
+        print('mean_vars:', mean_vars)
+        print('std_vars:', std_vars)
         # Save normalization parameters
         torch.save({"min_coords": min_coords, "max_coords": max_coords}, dst / "coords_norm.th")
         torch.save({"mean": mean_vars, "std": std_vars}, dst / "vars_norm.th")
