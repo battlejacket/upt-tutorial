@@ -220,4 +220,4 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True, s
 
 if __name__ == "__main__":
     # main(**parse_args())
-    main('./data/ffs/csv/SST/', './data/ffs/preprocessedSST/', compute_sdf_values=False, save_normalization_param=True, sst=True)
+    main('./data/ffs/csv/bfs/', './data/ffs/preprocessedBFS/', compute_sdf_values=False, save_normalization_param=True, sst=True)

@@ -367,12 +367,12 @@ class ffsDataset(Dataset):
 
     def normalize_re(self, re):
         # re = (re - 550) / 260
-        re = (re -self.std[-1]) / self.mean[-1]
+        # re = (re -self.std[-1]) / self.mean[-1]
         return re
 
     def denormalize_re(self, re):
         # re = (re * 260) + 550
-        re = (re * self.std[-1]) + self.mean[-1]
+        # re = (re * self.std[-1]) + self.mean[-1]
         return re
 
     def subsample(self, nrPoints, mesh_pos, features=None, seed=None):
