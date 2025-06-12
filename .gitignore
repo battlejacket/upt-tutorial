@@ -11,6 +11,7 @@
 wandb/
 save/
 data/ffs/csv/
+data/ffs/processed/
 data/ffs/preprocessed*/
 
 yamls_run/

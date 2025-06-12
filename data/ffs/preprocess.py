@@ -158,7 +158,6 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True, s
         re = torch.tensor(parameters['re']).float()
         sum_re += re
         sum_sq_re += re ** 2
-        
         # Save sdf if SST
         if sst:
             sdf_values = torch.tensor(csvData["sdf"]).float().squeeze()
@@ -205,12 +204,13 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True, s
         # Calculate mean and std
         mean_vars = sum_vars / total_samples
         std_vars = torch.sqrt((sum_sq_vars / total_samples) - (mean_vars ** 2))
+        
         mean_re = sum_re / len(uris)
         std_re = torch.sqrt((sum_sq_re / len(uris)) - (mean_re ** 2))
+        
         mean_vars = torch.cat((mean_vars, mean_re.unsqueeze(0)))
         std_vars = torch.cat((std_vars, std_re.unsqueeze(0)))
-        print('mean_vars:', mean_vars)
-        print('std_vars:', std_vars)
+        
         # Save normalization parameters
         torch.save({"min_coords": min_coords, "max_coords": max_coords}, dst / "coords_norm.th")
         torch.save({"mean": mean_vars, "std": std_vars}, dst / "vars_norm.th")
@@ -220,4 +220,4 @@ def main(src, dst, compute_sdf_values = True, save_normalization_param = True, s
 
 if __name__ == "__main__":
     # main(**parse_args())
-    main('./data/ffs/csv/bfs/', './data/ffs/preprocessedBFS/', compute_sdf_values=False, save_normalization_param=True, sst=True)
+    main('./data/ffs/csv/bfs/', './data/ffs/preprocessed/bfs/', compute_sdf_values=False, save_normalization_param=True, sst=True)

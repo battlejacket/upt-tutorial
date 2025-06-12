@@ -46,7 +46,7 @@ class ffsDataset(Dataset):
         else:
             self.domain_min = torch.tensor(self.crop_values[0]).squeeze(0)
             self.domain_max = torch.tensor(self.crop_values[1]).squeeze(0)
-        self.scale = 200
+        self.scale = 2
 
         self.xMin = self.domain_min[0].numpy()
         self.xMax = self.domain_max[0].numpy()
@@ -367,12 +367,31 @@ class ffsDataset(Dataset):
 
     def normalize_re(self, re):
         # re = (re - 550) / 260
-        # re = (re -self.std[-1]) / self.mean[-1]
+        
+        # min max scaling
+        re = ((re - 25000) / (35000 - 25000)) * self.scale
+        # re = ((re - 25000) / (35000 - 25000)) * 1
+        
+        # mean/std scaling
+        # re = ((re -self.mean[-1]) / self.std[-1])
+        
+        # mean/std scaling with self.scale
+        # re = ((re -self.mean[-1]) / self.std[-1]) * self.scale
+        
         return re
 
     def denormalize_re(self, re):
         # re = (re * 260) + 550
-        # re = (re * self.std[-1]) + self.mean[-1]
+        
+        # min max scaling
+        re = (re / self.scale) * (35000 - 25000) + 25000
+        # re = (re / 1) * (35000 - 25000) + 25000
+        
+        # mean/std scaling
+        # re =  (re * self.std[-1]) + self.mean[-1]
+        
+        # mean/std scaling with self.scale
+        # re =  ((re/self.scale) * self.std[-1]) + self.mean[-1]
         return re
 
     def subsample(self, nrPoints, mesh_pos, features=None, seed=None):
