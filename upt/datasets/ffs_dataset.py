@@ -46,7 +46,7 @@ class ffsDataset(Dataset):
         else:
             self.domain_min = torch.tensor(self.crop_values[0]).squeeze(0)
             self.domain_max = torch.tensor(self.crop_values[1]).squeeze(0)
-        self.scale = 2
+        self.scale = 200
 
         self.xMin = self.domain_min[0].numpy()
         self.xMax = self.domain_max[0].numpy()
