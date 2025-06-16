@@ -440,10 +440,10 @@ class ffsDataset(Dataset):
         p = torch.load(self.uris[idx] / "p.th", weights_only=True)
         target = torch.cat((u, v, p), dim=1)
         parameters = readParametersFromFileName(self.uris[idx].name, self.parameterDef)
-        re = parameters['re']
+        re = torch.tensor(parameters['re'], dtype=torch.float32).squeeze(0)
         Lo = parameters['Lo']
         Ho = parameters['Ho']
-        dCp = parameters['dCp']
+        dCp = torch.tensor(parameters['dCp'], dtype=torch.float32).squeeze(0)
         sdf = torch.load(self.uris[idx] / "mesh_sdf.th", weights_only=True).unsqueeze(1).float()
        
         if self.crop_values is not None:
