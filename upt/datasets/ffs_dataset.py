@@ -22,6 +22,7 @@ class ffsDataset(Dataset):
             useMesh=None,
             meshParameters=None,
             customOutputPos=None,
+            deterministic=False
     ):
         super().__init__()
         self.root = Path(root).expanduser()
@@ -37,6 +38,7 @@ class ffsDataset(Dataset):
         self.baseMesh = None
         self.baseSdf = None
         self.customOutputPos = customOutputPos
+        self.deterministic = deterministic
 
         # Define spatial min/max of simulation
         if self.crop_values is None:
@@ -463,7 +465,7 @@ class ffsDataset(Dataset):
         # Subsample outputs
         # output_pos, target_feat = self.subsample(self.num_outputs, mesh_pos, target, seed=idx + 1)
         if self.num_outputs != float("inf"):
-            if self.mode == "train":
+            if self.mode == "train" and not self.deterministic:
                 seed = None
             else:
                 seed = idx +1
@@ -483,7 +485,7 @@ class ffsDataset(Dataset):
         else:
             # Subsample inputs from the current data point
             # input_pos, input_feat = self.subsample(self.num_inputs, mesh_pos, sdf, seed=idx)
-            if self.num_inputs != float("inf"):            
+            if self.num_inputs != float("inf") and not self.deterministic:            
                 if self.mode == "train":
                         seed = None
                 else:
